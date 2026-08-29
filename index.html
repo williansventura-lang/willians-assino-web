@@ -119,6 +119,38 @@ const DISC_Q=[
 ];
 let S=null, DRAG=null;
 
+/* ===== Regras de avanço por etapa (gating) ===== */
+function scFilled(c,field){ return c[field] && Object.values(c[field]).some(v=>v>0||v===-1); }
+function discDone(c){ return c.disc && c.disc.done; }
+function cultDone(c){ return (c.persona&&Object.values(c.persona).some(v=>v>0)) || (c.principios&&c.principios.some(v=>v>0)); }
+// requirement to ENTER a given stage (index in STAGES)
+const GATE={
+ "Triagem":{test:c=>!!(c.email||c.phone||c.linkedin), msg:"Preencha ao menos um contato (e-mail, telefone ou LinkedIn) e a fonte."},
+ "Fit cultural":{test:c=>!!((c.cvText&&c.cvText.trim())||(c.notes&&c.notes.trim())), msg:"Antes do fit cultural, anexe o currículo OU registre uma anotação da triagem (campo Anotações) — útil para indicações sem CV."},
+ "Fit técnico":{test:c=>discDone(c)&&cultDone(c), msg:"Conclua o DISC e avalie o fit cultural (personas/princípios) antes do fit técnico."},
+ "Entrevista":{test:c=>scFilled(c,'scRecruiter'), msg:"Preencha o Scorecard do Recrutador antes de marcar a entrevista com o gestor."},
+ "Shortlist":{test:c=>scFilled(c,'scManager')&&c.recommendation&&c.recommendation.score!=null, msg:"Preencha o Scorecard do Gestor e calcule a recomendação antes da shortlist."},
+ "Proposta":{test:c=>c.recommendation&&['Contratar','Contratar com ressalvas'].some(d=>(c.recommendation.decision||'').startsWith(d)), msg:"A recomendação precisa ser \"Contratar\" ou \"com ressalvas\" para avançar à proposta."},
+};
+function canEnter(c,stage){ const g=GATE[stage]; if(!g)return {ok:true}; return g.test(c)?{ok:true}:{ok:false,msg:g.msg}; }
+
+/* ===== Mensagens padrão por etapa ===== */
+function stageMessage(c,stage){
+  const j=jobById(c.jobId); const vaga=j?j.titulo:'a vaga'; const nome=(c.nome||'').split(' ')[0]||'[nome]';
+  const M={
+   "Triagem":`Olá, ${nome}! Aqui é da Assino. Recebemos seu perfil para a vaga de ${vaga} e gostaríamos de seguir com você no processo. Podemos conversar? `,
+   "Fit cultural":`Oi, ${nome}! Para a próxima etapa da vaga de ${vaga}, queremos te conhecer melhor. Você pode responder um teste rápido de perfil (leva ~4 min)? Envio o link em seguida.`,
+   "Fit técnico":`${nome}, avançamos com você! A próxima etapa da vaga de ${vaga} é uma conversa técnica. Qual o melhor horário para você nesta semana?`,
+   "Entrevista":`${nome}, tudo certo? Gostaríamos de te convidar para uma entrevista para a vaga de ${vaga}. Sugiro um horário no convite; se não puder, me diga outro.`,
+   "Shortlist":`${nome}, seguimos muito bem no processo da vaga de ${vaga}! Você está entre os finalistas. Em breve trazemos os próximos passos.`,
+   "Proposta":`${nome}, é com alegria que avançamos para a etapa de proposta da vaga de ${vaga}! Vou te enviar os detalhes por e-mail. Parabéns pela trajetória no processo.`,
+   "Contratado":`${nome}, seja bem-vindo(a) à Assino! Estamos muito felizes em ter você no time. Em breve enviaremos as informações de onboarding.`,
+   "Reprovado":`${nome}, obrigado por participar do processo da vaga de ${vaga}. Neste momento seguimos com outros perfis, mas seu interesse foi muito valioso — manteremos seu contato para futuras oportunidades.`,
+  };
+  return M[stage]||`Olá, ${nome}! Atualização sobre a vaga de ${vaga}.`;
+}
+
+
 /* ---------- Storage layer (Fase 1 local + Fase 2 backend adapter) ---------- */
 const Store={
   key:'assino_ats_v1',
@@ -191,21 +223,21 @@ function compsForFamily(f){
 let FCAND={q:'',vaga:'',etapa:'',status:'',sort:'nome',dir:1};
 let FJOB={q:'',gestor:'',status:''};
 let FPIPE={gestor:'',q:''};
-let FDASH={vaga:'',gestor:''};
+let FDASH={vaga:'',gestor:'',status:['aberta']};
 function jobAge(j){ if(!j.openedAt)return null; const end=(j.status==='fechada'&&j.filledAt)?j.filledAt:new Date().toISOString(); return daysBetween(j.openedAt,end); }
 function uniqGestores(){ return [...new Set(S.jobs.map(j=>j.manager).filter(Boolean))].sort(); }
-function svgBars(items,opts){ // items:[{label,value,color?}] horizontal bars
-  opts=opts||{}; const max=Math.max(1,...items.map(i=>i.value)); const bw=opts.w||420, rh=26, gap=6, lblW=opts.lblW||150;
-  const h=items.length*(rh+gap)+8;
-  let y=4, rows='';
-  items.forEach(it=>{ const w=Math.round((it.value/max)*(bw-lblW-46)); const col=it.color||'#2C57C8';
-    rows+=`<text x="0" y="${y+rh/2+4}" font-size="12" fill="#4C5573" font-family="Manrope">${escSvg(it.label)}</text>`+
-          `<rect x="${lblW}" y="${y}" width="${Math.max(2,w)}" height="${rh}" rx="5" fill="${col}"/>`+
-          `<text x="${lblW+Math.max(2,w)+6}" y="${y+rh/2+4}" font-size="12" font-weight="700" fill="#0B1120" font-family="Manrope">${it.value}${opts.suffix||''}</text>`;
+function svgBars(items,opts){ // items:[{label,value,color?}] horizontal bars, labels never cut
+  opts=opts||{}; const max=Math.max(1,...items.map(i=>i.value)); const bw=opts.w||860, lblW=opts.lblW||300, rh=opts.rh||30, gap=8, padR=54;
+  const h=items.length*(rh+gap)+8; let y=4, rows='';
+  items.forEach(it=>{ const barMax=bw-lblW-padR; const w=Math.max(3,Math.round((it.value/max)*barMax)); const col=it.color||'#2C57C8';
+    const lbl=String(it.label);
+    rows+=`<text x="0" y="${y+rh/2+4}" font-size="12.5" fill="#0B1120" font-family="Manrope" font-weight="600">${escSvg(lbl,opts.lblChars||44)}</text>`+
+          `<rect x="${lblW}" y="${y}" width="${w}" height="${rh}" rx="6" fill="${col}"/>`+
+          `<text x="${lblW+w+7}" y="${y+rh/2+4}" font-size="12.5" font-weight="800" fill="#0B1120" font-family="Manrope">${it.value}${opts.suffix||''}</text>`;
     y+=rh+gap; });
-  return `<svg viewBox="0 0 ${bw} ${h}" width="100%" style="max-width:${bw}px">${rows}</svg>`;
+  return `<svg viewBox="0 0 ${bw} ${h}" width="100%" style="max-width:100%">${rows}</svg>`;
 }
-function escSvg(s){return (s==null?'':String(s)).slice(0,26).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function escSvg(s,n){n=n||40;s=(s==null?'':String(s));if(s.length>n)s=s.slice(0,n-1)+'…';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 
 /* ================= NAV ================= */
 function go(t){ document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
@@ -223,54 +255,57 @@ function ttfOverall(){ const hired=S.candidates.filter(c=>c.stage==='Contratado'
   let sum=0,n=0; hired.forEach(c=>{const j=jobById(c.jobId); if(j&&j.openedAt&&new Date(j.openedAt).getFullYear()>=2026){sum+=daysBetween(j.openedAt,c.hiredAt);n++;}}); return n?Math.round(sum/n):null; }
 function dashScope(){
   let jobs=S.jobs.slice();
+  if(FDASH.status&&FDASH.status.length) jobs=jobs.filter(j=>FDASH.status.includes(j.status));
   if(FDASH.gestor) jobs=jobs.filter(j=>j.manager===FDASH.gestor);
   if(FDASH.vaga) jobs=jobs.filter(j=>j.id===FDASH.vaga);
   const jids=new Set(jobs.map(j=>j.id));
   const cands=S.candidates.filter(c=>jids.has(c.jobId));
   return {jobs,cands};
 }
+function toggleDashStatus(st){ FDASH.status=FDASH.status||[]; const i=FDASH.status.indexOf(st); if(i>=0)FDASH.status.splice(i,1); else FDASH.status.push(st); renderDash(); }
 function renderDash(){
   const {jobs,cands}=dashScope();
   const openJobs=jobs.filter(j=>j.status==='aberta');
   const totalC=cands.length;
   const inProcess=cands.filter(c=>!['Reprovado','Contratado'].includes(c.stage)).length;
-  const shortlist=cands.filter(c=>['Shortlist','Proposta','Contratado'].includes(c.stage)).length;
-  // TTF 2026 within scope
+  const hiredCount=cands.filter(c=>c.stage==='Contratado').length;
   const hired=cands.filter(c=>c.stage==='Contratado'&&c.hiredAt);
   let sum=0,n=0; hired.forEach(c=>{const j=jobById(c.jobId);if(j&&j.openedAt&&new Date(j.openedAt).getFullYear()>=2026){sum+=daysBetween(j.openedAt,c.hiredAt);n++;}});
   const ttf=n?Math.round(sum/n):null;
   const perStage=STAGES.map(st=>({label:st,value:cands.filter(c=>c.stage===st).length}));
-  // open vacancies: current age vs role average
-  const openAges=openJobs.map(j=>({j,age:jobAge(j)})).filter(x=>x.age!=null).sort((a,b)=>b.age-a.age);
-  // role average age (from closed jobs with ttfAdm or computed)
-  const roleAvg={}; const roleCnt={};
+  const openAges=jobs.filter(j=>j.status==='aberta').map(j=>({j,age:jobAge(j)})).filter(x=>x.age!=null).sort((a,b)=>b.age-a.age);
+  const roleAvg={},roleCnt={};
   S.jobs.forEach(j=>{ const a=(j.status==='fechada'&&j.filledAt)?daysBetween(j.openedAt,j.filledAt):(typeof j.ttfAdm==='number'?j.ttfAdm:null); if(a!=null){roleAvg[j.titulo]=(roleAvg[j.titulo]||0)+a;roleCnt[j.titulo]=(roleCnt[j.titulo]||0)+1;} });
-  const openBars=openAges.slice(0,12).map(x=>({label:x.j.titulo.slice(0,22),value:x.age,suffix:'d',color:x.age>45?'#A33A40':(x.age>25?'#E7A317':'#2C57C8')}));
-  // candidates per open vacancy
-  const perVaga=openJobs.map(j=>({label:(j.code)+' '+j.titulo.slice(0,16),value:candsOf(j.id).length})).sort((a,b)=>b.value-a.value).slice(0,12);
+  const openBars=openAges.slice(0,12).map(x=>({label:x.j.code+' · '+x.j.titulo,value:x.age,suffix:'d',color:x.age>45?'#A33A40':(x.age>25?'#E7A317':'#2F7A34')}));
+  const perVaga=jobs.map(j=>({label:j.code+' · '+j.titulo,value:candsOf(j.id).length})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value).slice(0,12);
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FDASH.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
   const vagaOpts=['<option value="">Todas as vagas</option>'].concat(S.jobs.map(j=>`<option value="${j.id}" ${FDASH.vaga===j.id?'selected':''}>${esc(j.code)} — ${esc(j.titulo)}</option>`)).join('');
+  const statusChips=['aberta','pausada','fechada'].map(st=>{const on=(FDASH.status||[]).includes(st);
+    return `<button onclick="toggleDashStatus('${st}')" style="border:1px solid ${on?'#214498':'#E2E6F0'};background:${on?'#214498':'#fff'};color:${on?'#fff':'#4C5573'};border-radius:99px;padding:6px 14px;font-weight:700;font-size:12.5px;cursor:pointer">${on?'✓ ':''}${st}</button>`;}).join(' ');
   document.getElementById('v-dash').innerHTML=`
-  <div class="h-title">Dashboard</div><div class="h-sub">Filtros por vaga e gestor refletem em todos os indicadores.</div>
-  <div class="card" style="margin-bottom:14px"><div class="row" style="gap:10px;align-items:end">
-    <div style="min-width:240px"><label>Gestor</label><select onchange="FDASH.gestor=this.value;FDASH.vaga='';renderDash()">${gestOpts}</select></div>
-    <div style="min-width:300px"><label>Vaga</label><select onchange="FDASH.vaga=this.value;renderDash()">${vagaOpts}</select></div>
-    ${(FDASH.gestor||FDASH.vaga)?`<button class="btn sm" onclick="FDASH={vaga:'',gestor:''};renderDash()">Limpar filtros</button>`:''}
-  </div></div>
-  <div class="grid g4">
-    <div class="kpi"><div class="v">${openJobs.length}</div><div class="l">Vagas abertas</div></div>
-    <div class="kpi lite"><div class="v">${inProcess}</div><div class="l">Em processo (ativos)</div></div>
+  <div class="h-title">Dashboard</div><div class="h-sub">Filtros de status, gestor e vaga refletem em todos os indicadores.</div>
+  <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,#f7f9fd,#eef2fb)">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:end">
+      <div><label>Status da vaga (multi)</label><div style="display:flex;gap:8px;margin-top:2px">${statusChips}</div></div>
+      <div style="min-width:220px"><label>Gestor</label><select onchange="FDASH.gestor=this.value;FDASH.vaga='';renderDash()">${gestOpts}</select></div>
+      <div style="min-width:280px"><label>Vaga</label><select onchange="FDASH.vaga=this.value;renderDash()">${vagaOpts}</select></div>
+      ${(FDASH.gestor||FDASH.vaga||(FDASH.status||[]).length!==1||FDASH.status[0]!=='aberta')?`<button class="btn sm" onclick="FDASH={vaga:'',gestor:'',status:['aberta']};renderDash()">Redefinir</button>`:''}
+    </div>
+  </div>
+  <div class="grid g4" style="margin-bottom:16px">
+    <div class="kpi"><div class="v">${jobs.length}</div><div class="l">Vagas no filtro</div></div>
+    <div class="kpi lite"><div class="v">${inProcess}</div><div class="l">Candidatos ativos</div></div>
     <div class="kpi lite"><div class="v">${totalC}</div><div class="l">Candidatos (total)</div></div>
     <div class="kpi"><div class="v">${ttf==null?'—':ttf+'d'}</div><div class="l">Time-to-fill 2026</div></div>
   </div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h4 style="margin-bottom:10px">Funil por etapa</h4>${totalC?svgBars(perStage,{lblW:120,suffix:''}):'<div class="empty">Sem candidatos no filtro.</div>'}</div>
-    <div class="card"><h4 style="margin-bottom:10px">Candidatos por vaga aberta</h4>${perVaga.length?svgBars(perVaga,{lblW:170}):'<div class="empty">Sem vagas abertas no filtro.</div>'}</div>
+  <div class="grid g2" style="margin-bottom:16px">
+    <div class="card"><h4 style="margin-bottom:14px">Funil por etapa</h4>${totalC?svgBars(perStage,{lblW:130,rh:26,w:560}):'<div class="empty">Sem candidatos no filtro.</div>'}</div>
+    <div class="card"><h4 style="margin-bottom:14px">Candidatos por vaga</h4>${perVaga.length?svgBars(perVaga,{lblW:340,rh:26,w:640,lblChars:52}):'<div class="empty">Sem candidatos nas vagas do filtro.</div>'}</div>
   </div>
-  <div class="card" style="margin-top:14px"><h4 style="margin-bottom:4px">Tempo das vagas abertas (dias em aberto)</h4>
-    <p style="font-size:12px;color:var(--ink-faint);margin-top:0">Verde &lt;25d · amarelo 25–45d · vermelho &gt;45d. Compare com a média histórica da vaga abaixo.</p>
-    ${openBars.length?svgBars(openBars,{lblW:170,w:640}):'<div class="empty">Nenhuma vaga aberta no filtro.</div>'}
-    ${openAges.length?`<table style="margin-top:12px"><tr><th>Vaga</th><th>Gestor</th><th>Dias em aberto</th><th>Média histórica da vaga</th></tr>${openAges.slice(0,20).map(x=>{const avg=roleCnt[x.j.titulo]?Math.round(roleAvg[x.j.titulo]/roleCnt[x.j.titulo]):null;return `<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${esc(x.j.manager||'—')}</td><td><b>${x.age}d</b></td><td>${avg!=null?avg+'d':'—'}</td></tr>`;}).join('')}</table>`:''}
+  <div class="card"><h4 style="margin-bottom:4px">Tempo das vagas abertas × média histórica</h4>
+    <p style="font-size:12px;color:var(--ink-faint);margin-top:0;margin-bottom:12px">Barra por dias em aberto — verde &lt;25d · amarelo 25–45d · vermelho &gt;45d.</p>
+    ${openBars.length?svgBars(openBars,{lblW:360,rh:28,w:820,lblChars:56}):'<div class="empty">Nenhuma vaga aberta no filtro.</div>'}
+    ${openAges.length?`<table style="margin-top:14px"><tr><th>Vaga</th><th>Gestor</th><th>Dias em aberto</th><th>Média histórica</th></tr>${openAges.slice(0,20).map(x=>{const avg=roleCnt[x.j.titulo]?Math.round(roleAvg[x.j.titulo]/roleCnt[x.j.titulo]):null;const late=avg!=null&&x.age>avg;return `<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${esc(x.j.manager||'—')}</td><td style="font-weight:800;color:${x.age>45?'#A33A40':(x.age>25?'#B5761A':'#2F7A34')}">${x.age}d</td><td>${avg!=null?avg+'d'+(late?' ⚠️':''):'—'}</td></tr>`;}).join('')}</table>`:''}
   </div>`;
 }
 
@@ -399,7 +434,14 @@ function dragStart(e,id){DRAG=id;e.target.classList.add('drag');}
 function dragEnd(e){e.target.classList.remove('drag');}
 function dragOver(e){e.preventDefault();e.currentTarget.classList.add('over');}
 function dragLeave(e){e.currentTarget.classList.remove('over');}
-function drop(e,st){e.preventDefault();e.currentTarget.classList.remove('over');const c=S.candidates.find(x=>x.id===DRAG);if(c){c.stage=st;if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j&&j.status!=='fechada'){j.status='fechada';j.filledAt=c.hiredAt;}}Store.save();renderPipe();}}
+function drop(e,st){e.preventDefault();e.currentTarget.classList.remove('over');const c=S.candidates.find(x=>x.id===DRAG);if(!c)return;
+  const chk=canEnter(c,st);
+  if(!chk.ok){ alert('Não é possível mover para "'+st+'".\n\n'+chk.msg); renderPipe(); return; }
+  c.stage=st;
+  if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j&&j.status!=='fechada'){j.status='fechada';j.filledAt=c.hiredAt;}}
+  Store.save();renderPipe();
+  offerStageMessage(c.id,st);
+}
 
 /* ================= CANDIDATOS ================= */
 function candsFiltered(){
@@ -508,6 +550,9 @@ function openCand(id){
      <div id="reco-area"></div>
      <div class="flexbtns"><button class="btn navy" onclick="computeReco('${c.id}')">Calcular recomendação</button>
        <button class="btn" onclick="moveStage('${c.id}')">Mover etapa ▸</button>
+       <button class="btn" onclick="offerStageMessage('${c.id}','${c.stage}')">✉ Mensagem da etapa</button>
+       <button class="btn" onclick="printParecer('${c.id}')">🖨 Imprimir / PDF</button>
+       <button class="btn" onclick="excelParecer('${c.id}')">⬇ Excel</button>
        <button class="btn danger" onclick="delCand('${c.id}')">Excluir</button></div></div>
    ${c.cvText?('<div class="sec"><h4>Currículo (texto extraído)</h4><textarea rows="5" oninput="saveField(\''+c.id+'\',\'cvText\',this.value)">'+esc(c.cvText)+'</textarea></div>'):''}
    <div class="sec"><label>Anotações</label><textarea id="c-notes" rows="3" oninput="saveField('${c.id}','notes',this.value)">${esc(c.notes||'')}</textarea></div>
@@ -630,8 +675,79 @@ function renderRecoArea(c){
 }
 function moveStage(id){const c=S.candidates.find(x=>x.id===id);const i=STAGES.indexOf(c.stage);const opts=STAGES.map((s,k)=>`<option value="${s}" ${s===c.stage?'selected':''}>${s}</option>`).join('');
   openModal('Mover etapa — '+c.nome,`<label>Etapa</label><select id="mv">${opts}</select><div class="flexbtns"><button class="btn navy" onclick="doMove('${id}')">Mover</button><button class="btn" onclick="openCand('${id}')">Cancelar</button></div>`);}
-function doMove(id){const c=S.candidates.find(x=>x.id===id);const st=document.getElementById('mv').value;c.stage=st;if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j){j.status='fechada';j.filledAt=c.hiredAt;}}Store.save();openCand(id);}
+function doMove(id){const c=S.candidates.find(x=>x.id===id);const st=document.getElementById('mv').value;
+  const chk=canEnter(c,st);
+  if(!chk.ok){ alert('Não é possível mover para "'+st+'".\n\n'+chk.msg); return; }
+  c.stage=st;if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j){j.status='fechada';j.filledAt=c.hiredAt;}}Store.save();openCand(id);
+  offerStageMessage(id,st);
+}
 function delCand(id){if(!confirm('Excluir este candidato?'))return;S.candidates=S.candidates.filter(x=>x.id!==id);Store.save();closeModal();renderCands();}
+
+
+/* ===== Parecer final do candidato: imprimir/PDF e Excel ===== */
+function candParecerHTML(c){
+  const j=jobById(c.jobId); const fam=j?famById(j.familyId):null; const comps=fam?compsForFamily(fam):[];
+  const disc=c.disc&&c.disc.done?('D '+c.disc.D+' · I '+c.disc.I+' · S '+c.disc.S+' · C '+c.disc.C):'—';
+  const rec=c.recommendation||{};
+  const scRows=comps.map((cp,i)=>{const r=c.scRecruiter&&c.scRecruiter[i]; const m=c.scManager&&c.scManager[i];
+    const f=v=>v===-1?'N/A':(v?v:'—');
+    return '<tr><td>'+cp+'</td><td style="text-align:center">'+f(r)+'</td><td style="text-align:center">'+f(m)+'</td></tr>';}).join('');
+  const P=SEED.personasFull||SEED.personas;
+  const perRows=P.map(p=>'<tr><td>'+p.n+' ('+(p.tag||'')+')</td><td style="text-align:center">'+((c.persona&&c.persona[p.n])||'—')+'</td></tr>').join('');
+  return `<div style="font-family:Georgia,serif;color:#0B1120;max-width:820px;margin:0 auto;padding:24px">
+    <div style="border-bottom:3px solid #0A1633;padding-bottom:10px;margin-bottom:16px">
+      <div style="color:#C9A227;font-weight:bold;letter-spacing:2px;font-size:12px;font-family:Arial">A VELOCIDADE DA CHAVE · ASSINO</div>
+      <h1 style="margin:6px 0;color:#0A1633">Parecer de Candidato</h1>
+      <div style="font-family:Arial;color:#4C5573;font-size:13px">${esc(c.nome)} · ${j?('Vaga '+esc(j.code)+' — '+esc(j.titulo)+' ('+j.contrato+')'):'sem vaga'}</div>
+    </div>
+    <table style="width:100%;font-family:Arial;font-size:13px;border-collapse:collapse;margin-bottom:14px">
+      <tr><td style="padding:4px;color:#4C5573">Etapa atual</td><td style="padding:4px;font-weight:bold">${esc(c.stage)}</td>
+          <td style="padding:4px;color:#4C5573">Status</td><td style="padding:4px;font-weight:bold">${esc(c.statusAtual||'—')}</td></tr>
+      <tr><td style="padding:4px;color:#4C5573">Fonte</td><td style="padding:4px">${esc(c.source||'—')}</td>
+          <td style="padding:4px;color:#4C5573">Contato</td><td style="padding:4px">${esc(c.email||'')} ${esc(c.phone||'')}</td></tr>
+      <tr><td style="padding:4px;color:#4C5573">DISC</td><td style="padding:4px">${disc}</td>
+          <td style="padding:4px;color:#4C5573">Motivo saída</td><td style="padding:4px">${esc(c.motivoSaida||'—')}</td></tr>
+    </table>
+    <div style="background:${rec.cls==='g'?'#eef6ea':rec.cls==='m'?'#fbf1de':rec.cls==='b'?'#fbe9ea':'#eef2ff'};border-radius:10px;padding:14px;margin-bottom:16px;font-family:Arial">
+      <div style="font-size:12px;color:#4C5573">RECOMENDAÇÃO DE CONTRATAÇÃO</div>
+      <div style="font-size:22px;font-weight:bold;color:#0A1633">${rec.score!=null?rec.score+' / 100 — ':''}${esc(rec.decision||'Não calculado')}</div>
+      ${rec.reasons?'<div style="font-size:12px;color:#4C5573;margin-top:6px">'+rec.reasons.map(esc).join(' · ')+'</div>':''}
+    </div>
+    <h3 style="color:#214498;font-family:Arial;font-size:14px;border-bottom:1px solid #E2E6F0;padding-bottom:4px">Scorecard por competência</h3>
+    <table style="width:100%;font-family:Arial;font-size:12px;border-collapse:collapse;margin-bottom:14px">
+      <tr style="background:#0A1633;color:#fff"><th style="text-align:left;padding:6px">Competência</th><th style="padding:6px">Recrutador</th><th style="padding:6px">Gestor</th></tr>
+      ${scRows||'<tr><td colspan="3" style="padding:6px;color:#8A92AC">Sem competências avaliadas.</td></tr>'}
+    </table>
+    <h3 style="color:#214498;font-family:Arial;font-size:14px;border-bottom:1px solid #E2E6F0;padding-bottom:4px">Fit cultural — personas</h3>
+    <table style="width:100%;font-family:Arial;font-size:12px;border-collapse:collapse;margin-bottom:14px">
+      <tr style="background:#0A1633;color:#fff"><th style="text-align:left;padding:6px">Persona</th><th style="padding:6px">Aderência</th></tr>${perRows}
+    </table>
+    ${c.notes?'<h3 style="color:#214498;font-family:Arial;font-size:14px;border-bottom:1px solid #E2E6F0;padding-bottom:4px">Anotações</h3><div style="font-family:Arial;font-size:12.5px;color:#333;white-space:pre-wrap">'+esc(c.notes)+'</div>':''}
+    <div style="margin-top:24px;font-family:Arial;font-size:11px;color:#8A92AC;border-top:1px solid #E2E6F0;padding-top:8px">Gerado pelo ATS Assino em ${new Date().toLocaleString('pt-BR')}.</div>
+  </div>`;
+}
+function printParecer(id){ const c=S.candidates.find(x=>x.id===id); const w=window.open('','_blank');
+  w.document.write('<html><head><title>Parecer — '+esc(c.nome)+'</title></head><body>'+candParecerHTML(c)+'<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>');
+  w.document.close();
+}
+function excelParecer(id){ const c=S.candidates.find(x=>x.id===id); const j=jobById(c.jobId); const fam=j?famById(j.familyId):null; const comps=fam?compsForFamily(fam):[];
+  const rows=[];
+  rows.push(['Parecer de Candidato — Assino']);
+  rows.push(['Nome',c.nome]); rows.push(['Vaga',j?(j.code+' '+j.titulo):'']); rows.push(['Contrato',j?j.contrato:'']);
+  rows.push(['Etapa',c.stage]); rows.push(['Status',c.statusAtual||'']); rows.push(['Fonte',c.source||'']);
+  rows.push(['E-mail',c.email||'']); rows.push(['Telefone',c.phone||'']); rows.push(['LinkedIn',c.linkedin||'']);
+  rows.push(['DISC D',c.disc?c.disc.D:'']); rows.push(['DISC I',c.disc?c.disc.I:'']); rows.push(['DISC S',c.disc?c.disc.S:'']); rows.push(['DISC C',c.disc?c.disc.C:'']);
+  rows.push(['Recomendação',(c.recommendation&&c.recommendation.decision)||'']); rows.push(['Score',(c.recommendation&&c.recommendation.score)||'']);
+  rows.push(['Motivo saída',c.motivoSaida||'']);
+  rows.push([]); rows.push(['Competência','Nota Recrutador','Nota Gestor']);
+  comps.forEach((cp,i)=>{const r=c.scRecruiter&&c.scRecruiter[i];const m=c.scManager&&c.scManager[i];const f=v=>v===-1?'N/A':(v||'');rows.push([cp,f(r),f(m)]);});
+  rows.push([]); rows.push(['Persona','Aderência']);
+  (SEED.personasFull||SEED.personas).forEach(p=>rows.push([p.n+' ('+(p.tag||'')+')',(c.persona&&c.persona[p.n])||'']));
+  rows.push([]); rows.push(['Anotações',c.notes||'']);
+  const csv=rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';')).join('\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='parecer_'+(c.nome||'candidato').replace(/[^a-z0-9]+/gi,'_')+'.csv'; a.click();
+}
 
 /* ================= MENSAGENS ================= */
 function renderMsg(){
@@ -836,6 +952,38 @@ function seedJobs(){
   Store.save(); badge(added+' vaga(s) carregada(s)'); go('jobs');
 }
 
+
+
+/* ===== Disparo de mensagem na própria etapa ===== */
+function offerStageMessage(id,stage){
+  const c=S.candidates.find(x=>x.id===id); if(!c)return;
+  const j=jobById(c.jobId);
+  const msg=stageMessage(c,stage);
+  const email=c.email||'';
+  const phone=(c.phone||'').replace(/\D/g,'');
+  const subj=(stage==='Proposta'?'Proposta — ':'Processo seletivo — ')+(j?j.titulo:'Assino');
+  const gmail='https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(email)+'&su='+encodeURIComponent(subj)+'&body='+encodeURIComponent(msg);
+  const wa='https://wa.me/'+(phone?('55'+phone.replace(/^55/,'')):'')+'?text='+encodeURIComponent(msg);
+  let extra='';
+  if(stage==='Fit cultural'){ const base=(S.config.discUrl||'').trim();
+    if(base){ const link=base+'?cid='+encodeURIComponent(id)+'&nome='+encodeURIComponent(c.nome)+(j?'&vaga='+encodeURIComponent(j.code):'')+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'');
+      extra='<div class="sec"><h4>Teste DISC desta etapa</h4><p style="font-size:12px;color:var(--ink-soft)">Envie este link ao candidato; o resultado entra sozinho na ficha.</p><textarea rows="2">'+esc(link)+'</textarea><div class="flexbtns"><a class="btn gold" href="'+esc(link)+'" target="_blank">Abrir teste</a><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+link.replace(/'/g,"\\'")+'\');badge(\'link DISC copiado\')">Copiar link DISC</button></div></div>'; }
+    else { extra='<div class="sec"><p style="font-size:12px;color:var(--warn)">Defina a URL do teste DISC em Config para gerar o link aqui.</p></div>'; }
+  }
+  openModal('Mensagem — etapa '+stage+' — '+c.nome,`
+    <p style="font-size:13px;color:var(--ink-soft)">Mensagem padrão sugerida para esta etapa. Edite se quiser e dispare por e-mail ou WhatsApp.</p>
+    <label>Mensagem</label><textarea id="stg-msg" rows="5">${esc(msg)}</textarea>
+    <div class="flexbtns">
+      <a class="btn gold" href="${gmail}" target="_blank" onclick="markMsg('${id}','${stage}')">Enviar por e-mail (Gmail)</a>
+      <a class="btn" href="${wa}" target="_blank" onclick="markMsg('${id}','${stage}')">Enviar por WhatsApp</a>
+      <button class="btn ghost" onclick="copyStageMsg()">Copiar</button>
+    </div>
+    ${extra}
+    <div class="flexbtns" style="margin-top:10px"><button class="btn" onclick="openCand('${id}')">Abrir ficha do candidato</button><button class="btn ghost" onclick="closeModal()">Fechar</button></div>
+  `);
+}
+function copyStageMsg(){const t=document.getElementById('stg-msg');t.select();navigator.clipboard&&navigator.clipboard.writeText(t.value);badge('mensagem copiada');}
+function markMsg(id,stage){const c=S.candidates.find(x=>x.id===id);c.msgLog=c.msgLog||{};c.msgLog[stage]=new Date().toISOString();Store.save();}
 
 /* ===== Auto-verificação de resultados DISC (sem apagar edições) ===== */
 let DISC_POLL=null;
