@@ -127,23 +127,41 @@ const Store={
   _pushTimer:null,
   async pushBackend(){ const u=S.config.backendUrl; if(!u)return; // debounce auto-saves so a big write isn't overwritten by a quick next one
     clearTimeout(this._pushTimer); this._pushTimer=setTimeout(()=>{ this._doPush(); }, 1200); },
-  async _doPush(){ const u=S.config.backendUrl; if(!u)return; const body=JSON.stringify({action:'save',data:S});
+  async _doPush(){ const u=S.config.backendUrl; if(!u)return; await this.mergeDiscFromCloud(); const body=JSON.stringify({action:'save',data:S});
     try{ await fetch(u,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body}); badge('salvo (local + nuvem)'); }catch(e){ badge('salvo local (nuvem falhou)',true);} },
   async pushVerify(){ const u=S.config.backendUrl; if(!u){badge('defina a URL do backend',true);return false;}
     clearTimeout(this._pushTimer);
     badge('enviando à nuvem…');
+    await this.mergeDiscFromCloud();
     const body=JSON.stringify({action:'save',data:S});
-    try{ await fetch(u,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body}); }catch(e){ badge('envio falhou',true); return false; }
-    // wait for Apps Script to finish writing the chunks, then verify by reading back
+    try{ await fetch(u,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body}); }catch(e){ badge('envio falhou: '+e.message,true); return false; }
     const wantJ=S.jobs.length, wantC=S.candidates.length;
-    for(let attempt=0; attempt<6; attempt++){
-      await new Promise(r=>setTimeout(r,1500));
+    let lastC=null,lastJ=null;
+    for(let attempt=0; attempt<12; attempt++){
+      await new Promise(r=>setTimeout(r,2000));
       try{ const rr=await fetch(u+'?action=load&t='+Date.now()); const jj=await rr.json();
-        if(jj&&jj.data&&(jj.data.candidates||[]).length===wantC&&(jj.data.jobs||[]).length===wantJ){
-          badge('nuvem confirmada: '+wantJ+' vagas · '+wantC+' candidatos'); return true; }
+        if(jj&&jj.data){ lastC=(jj.data.candidates||[]).length; lastJ=(jj.data.jobs||[]).length;
+          badge('conferindo… nuvem tem '+lastJ+' vagas · '+lastC+' cand.');
+          if(lastC===wantC&&lastJ===wantJ){ badge('✓ nuvem confirmada: '+wantJ+' vagas · '+wantC+' candidatos'); return true; } }
       }catch(e){}
     }
-    badge('enviado, mas não confirmei — tente novamente',true); return false;
+    badge('nuvem tem '+(lastC==null?'?':lastJ+' vagas · '+lastC+' cand')+' (esperado '+wantJ+'·'+wantC+') — clique de novo',true); return false;
+  },
+  async mergeDiscFromCloud(){ const u=S.config.backendUrl; if(!u)return false;
+    let changed=false;
+    try{ const r=await fetch(u+'?action=load&t='+Date.now()); const j=await r.json();
+      if(j&&j.data){
+        // a) copy DISC done from cloud candidates into local (by id)
+        const cloudById={}; (j.data.candidates||[]).forEach(cc=>{cloudById[cc.id]=cc;});
+        S.candidates.forEach(lc=>{ const cc=cloudById[lc.id];
+          if(cc&&cc.disc&&cc.disc.done&&!(lc.disc&&lc.disc.done)){ lc.disc={D:cc.disc.D||0,I:cc.disc.I||0,S:cc.disc.S||0,C:cc.disc.C||0,done:true}; changed=true; } });
+        // b) drain _discInbox (results that arrived before the candidate was in cloud)
+        const inbox=j.data._discInbox||[];
+        inbox.forEach(p=>{ const lc=S.candidates.find(x=>x.id===p.cid); if(lc&&!(lc.disc&&lc.disc.done)){ lc.disc={D:p.D||0,I:p.I||0,S:p.S||0,C:p.C||0,done:true}; changed=true; } });
+      }
+    }catch(e){}
+    if(changed){ localStorage.setItem(this.key,JSON.stringify(S)); }
+    return changed;
   },
   async pullBackend(){ const u=S.config.backendUrl; if(!u)return false; try{ const r=await fetch(u+'?action=load'); const j=await r.json(); if(j&&j.data){ S=j.data; localStorage.setItem(this.key,JSON.stringify(S)); return true;} }catch(e){} return false; }
 };
@@ -457,7 +475,7 @@ function discDom(d){const arr=[['D',d.D],['I',d.I],['S',d.S],['C',d.C]].sort((a,
 
 /* ---------- Candidate detail (DISC, personas, scorecards, aderência, recomendação) ---------- */
 function openCand(id){
-  const c=S.candidates.find(x=>x.id===id);if(!c)return;const j=jobById(c.jobId);const fam=j?famById(j.familyId):null;
+  const c=S.candidates.find(x=>x.id===id);if(!c)return; window._openCandId=id;const j=jobById(c.jobId);const fam=j?famById(j.familyId):null;
   const comps=fam?compsForFamily(fam):[];
   openModal(c.nome+(j?' · '+j.code:''),`
    <div class="row" style="gap:18px;flex-wrap:wrap">
@@ -713,7 +731,7 @@ function discLink(id){ const c=S.candidates.find(x=>x.id===id); const j=jobById(
   const base=(S.config.discUrl||'').trim();
   const params='?cid='+encodeURIComponent(id)+'&nome='+encodeURIComponent(c.nome)+(j?'&vaga='+encodeURIComponent(j.code):'')+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'');
   const url=base? base+params : '[hospede o arquivo disc_assino.html e cole a URL dele em Config] '+params;
-  openModal('Link do teste DISC — '+c.nome,`<p style="font-size:13px;color:var(--ink-soft)">Envie este link ao candidato. Ao terminar, ${S.config.backendUrl?'o resultado entra automaticamente (backend configurado) — depois clique em “Puxar dados da nuvem”.':'ele receberá um <b>código</b> para te enviar; cole em “Colar código de resultado”.'}</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns">${base?`<a class="btn gold" href="${esc(base+params)}" target="_blank">Abrir teste</a>`:''}<button class="btn" onclick="openCand('${id}')">Voltar</button></div>${base?'':'<p style="font-size:12px;color:var(--warn)">Defina a URL do teste em Config → “Página do teste DISC”.</p>'}`);
+  openModal('Link do teste DISC — '+c.nome,`<p style="font-size:13px;color:var(--ink-soft)">Envie este link ao candidato. Ao terminar, ${S.config.backendUrl?'o resultado entra automaticamente na ficha em até ~1 min (ou clique em “Puxar dados da nuvem” para ver na hora).':'ele receberá um <b>código</b> para te enviar; cole em “Colar código de resultado”.'}</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns">${base?`<a class="btn gold" href="${esc(base+params)}" target="_blank">Abrir teste</a>`:''}<button class="btn" onclick="openCand('${id}')">Voltar</button></div>${base?'':'<p style="font-size:12px;color:var(--warn)">Defina a URL do teste em Config → “Página do teste DISC”.</p>'}`);
 }
 function discPaste(id){ openModal('Colar código de resultado DISC',`<label>Código enviado pelo candidato</label><textarea id="disc-code" rows="3" placeholder="DISC-..."></textarea><div class="flexbtns"><button class="btn navy" onclick="discApply('${id}')">Aplicar</button><button class="btn" onclick="openCand('${id}')">Voltar</button></div>`); }
 function discApply(id){ const c=S.candidates.find(x=>x.id===id); try{ let code=document.getElementById('disc-code').value.trim(); code=code.replace(/^DISC-/,''); const o=b64d(code); c.disc={D:o.D||0,I:o.I||0,S:o.S||0,C:o.C||0,done:true}; Store.save(); openCand(id);}catch(e){ alert('Código inválido.'); } }
@@ -818,11 +836,33 @@ function seedJobs(){
   Store.save(); badge(added+' vaga(s) carregada(s)'); go('jobs');
 }
 
+
+/* ===== Auto-verificação de resultados DISC (sem apagar edições) ===== */
+let DISC_POLL=null;
+function startDiscPoll(){ if(DISC_POLL)clearInterval(DISC_POLL);
+  DISC_POLL=setInterval(async()=>{ if(!S.config||!S.config.backendUrl)return;
+    const changed=await Store.mergeDiscFromCloud();
+    if(changed){ badge('DISC recebido da nuvem ✓');
+      const modalOpen=document.getElementById('modalbg').classList.contains('open');
+      const cur=document.querySelector('.tabs button.active');
+      if(modalOpen && window._openCandId){ openCand(window._openCandId); }
+      else if(cur){ const t=cur.dataset.t; if(t==='cands')renderCands(); else if(t==='pipe')renderPipe(); else if(t==='dash')renderDash(); }
+    }
+  }, 45000);
+}
+
 /* ================= INIT ================= */
 (async function init(){
   S=Store.load()||seedState();
-  if(S.config&&S.config.backendUrl){ await Store.pullBackend(); }
+  if(S.config&&S.config.backendUrl){ 
+    try{ const r=await fetch(S.config.backendUrl+'?action=load&t='+Date.now()); const j=await r.json();
+      if(j&&j.data&&((j.data.candidates||[]).length>0||(j.data.jobs||[]).length>0)){ 
+        // cloud has data -> use it as source of truth
+        S=j.data; localStorage.setItem(Store.key,JSON.stringify(S)); }
+    }catch(e){}
+  }
   go('dash');
+  startDiscPoll();
 })();
 </script>
 </body></html>
