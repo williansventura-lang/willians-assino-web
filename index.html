@@ -553,8 +553,9 @@ function addCandidatura(i){ const r=(S._candInbox||[])[i]; if(!r)return;
   let jobId=''; if(r.vagaCode){ const j=S.jobs.find(x=>x.code===r.vagaCode); if(j)jobId=j.id; }
   const c={id:uid(),jobId:jobId,nome:r.nome||'(sem nome)',email:r.email||'',phone:r.telefone||'',linkedin:r.linkedin||'',
     source:'Candidatura (site)',stage:'Triagem',createdAt:new Date().toISOString(),
-    statusAtual:'Em processo',motivoSaida:'',cvText:(r.mensagem||'')+(r.areaInteresse?'\n\nÁrea de interesse: '+r.areaInteresse:''),
-    disc:{D:0,I:0,S:0,C:0,done:false},persona:{},principios:[],scRecruiter:{},scManager:{},aderencia:{},notes:'',recommendation:{}};
+    statusAtual:'Em processo',motivoSaida:'',cvText:(r.cvText||''),
+    notes:[r.mensagem?('Mensagem: '+r.mensagem):'',r.areaInteresse?('Área de interesse: '+r.areaInteresse):''].filter(Boolean).join('\n'),
+    disc:{D:0,I:0,S:0,C:0,done:false},persona:{},principios:[],scRecruiter:{},scManager:{},aderencia:{},recommendation:{}};
   S.candidates.push(c); S._candInbox.splice(i,1); Store.save(); badge('candidato adicionado'); renderCands();
 }
 function dismissCandidatura(i){ (S._candInbox||[]).splice(i,1); Store.save(); renderCands(); }

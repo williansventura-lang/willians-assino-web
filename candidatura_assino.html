@@ -32,6 +32,9 @@ input,select,textarea{font-family:inherit;font-size:14px;border:1px solid var(--
    <div class="req"><label>E-mail</label><input id="c-email" type="email"></div>
    <label>Telefone / WhatsApp</label><input id="c-fone" placeholder="(11) 90000-0000">
    <label>LinkedIn (link do perfil)</label><input id="c-lk" placeholder="https://linkedin.com/in/...">
+   <label>Currículo (PDF, DOCX ou TXT)</label><input type="file" id="c-cv" accept=".pdf,.docx,.txt" onchange="lerCV(this)">
+   <div id="cv-status" class="hint"></div>
+   <p class="hint">Informe o LinkedIn <b>ou</b> anexe o currículo (pelo menos um).</p>
    <div id="area-box"></div>
    <label>Conte um pouco sobre você (opcional)</label><textarea id="c-msg" rows="4" placeholder="Sua experiência, o que você procura, por que a Assino."></textarea>
    <div id="err" class="err hide"></div>
@@ -43,6 +46,21 @@ input,select,textarea{font-family:inherit;font-size:14px;border:1px solid var(--
    <div id="codebox"></div></div></div>
 </div>
 <script>
+let CV_TEXT='';
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('load'));document.head.appendChild(s);});}
+async function ensurePdf(){ if(window.pdfjsLib)return true; try{ await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; return true;}catch(e){return false;} }
+async function ensureDocx(){ if(window.mammoth)return true; try{ await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'); return true;}catch(e){return false;} }
+async function lerCV(inp){ const f=inp.files[0]; if(!f)return; const st=document.getElementById('cv-status');
+  const name=(f.name||'').toLowerCase(); st.textContent='Lendo currículo…'; st.style.color='#4C5573';
+  try{
+    if(name.endsWith('.txt')){ CV_TEXT=await f.text(); }
+    else if(name.endsWith('.docx')){ if(!await ensureDocx())throw 0; const buf=await f.arrayBuffer(); const r=await window.mammoth.extractRawText({arrayBuffer:buf}); CV_TEXT=r.value||''; }
+    else if(name.endsWith('.pdf')){ if(!await ensurePdf())throw 0; const buf=await f.arrayBuffer(); const pdf=await window.pdfjsLib.getDocument({data:buf}).promise; let t=''; for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const c=await pg.getTextContent();t+=c.items.map(x=>x.str).join(' ')+'\n';} CV_TEXT=t; }
+    else { throw 0; }
+    if(CV_TEXT.trim()){ st.textContent='Currículo anexado ✓'; st.style.color='#256129'; }
+    else { st.textContent='Não consegui ler o texto (se for PDF escaneado, cole o link do LinkedIn).'; st.style.color='#B5761A'; }
+  }catch(e){ st.textContent='Não consegui ler o arquivo. Use PDF, DOCX ou TXT (precisa de internet na 1ª vez).'; st.style.color='#8a2e33'; CV_TEXT=''; }
+}
 const params=new URLSearchParams(location.search);
 const BE=params.get('be')||'', VAGA=params.get('vaga')||'', TITULO=params.get('titulo')||'';
 if(TITULO){ document.getElementById('vaga-box').innerHTML='<div class="vaga">Vaga: '+TITULO.replace(/[<>]/g,'')+(VAGA?' ('+VAGA.replace(/[<>]/g,'')+')':'')+'</div>'; }
@@ -51,8 +69,9 @@ function v(id){const e=document.getElementById(id);return e?e.value.trim():'';}
 function enviar(){
   if(!v('c-nome')) return err('Preencha seu nome.');
   if(!v('c-email')) return err('Preencha seu e-mail.');
+  if(!v('c-lk') && !CV_TEXT.trim()) return err('Informe o LinkedIn ou anexe o currículo (pelo menos um).');
   const data={ type:'candidatura', nome:v('c-nome'), email:v('c-email'), telefone:v('c-fone'), linkedin:v('c-lk'),
-    vagaCode:VAGA, vagaTitulo:TITULO, areaInteresse:v('c-area'), mensagem:v('c-msg'), at:new Date().toISOString() };
+    vagaCode:VAGA, vagaTitulo:TITULO, areaInteresse:v('c-area'), mensagem:v('c-msg'), cvText:CV_TEXT, at:new Date().toISOString() };
   const code='CAND-'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));
   document.getElementById('form').classList.add('hide');
   document.getElementById('done').classList.remove('hide');
