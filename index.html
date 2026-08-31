@@ -398,7 +398,7 @@ function renderJobs(){
     <td><span class="pill ${j.status}">${j.status}</span></td>
     <td>${candsOf(j.id).length}</td>
     <td style="font-weight:800;color:${ageCls||'#4C5573'}">${age==null?'—':age+'d'}</td>
-    <td style="white-space:nowrap"><button class="btn sm" onclick="editJob('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="go('pipe');setTimeout(()=>selJob('${j.id}'),50)">Pipeline</button></td></tr>`;}).join('');
+    <td style="white-space:nowrap"><button class="btn sm" onclick="editJob('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="go('pipe');setTimeout(()=>selJob('${j.id}'),50)">Pipeline</button> <button class="btn sm ghost" onclick="candLink('${j.id}')">🔗 Candidatura</button></td></tr>`;}).join('');
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FJOB.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
   document.getElementById('v-jobs').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Vagas</div><div class="h-sub">Consolidado, filtros e controle de tempo de vaga aberta.</div></div><button class="btn gold" onclick="editJob()">+ Nova vaga</button></div>
@@ -458,8 +458,11 @@ function saveJob(id){
   if(id){const j=jobById(id); if(j.status==='fechada'&&!j.filledAt)j.filledAt=new Date().toISOString();}
   Store.save();closeModal();renderJobs();
 }
-function delJob(id){ if(!confirm('Excluir a vaga e manter os candidatos? Os candidatos ficam sem vaga. Confirmar exclusão?'))return;
-  S.jobs=S.jobs.filter(j=>j.id!==id); Store.save();closeModal();renderJobs(); }
+function delJob(id){ const j=jobById(id); if(!j)return;
+  openModal('Excluir vaga', `<p style="font-size:14px">Tem certeza que deseja excluir <b>${esc(j.code)} — ${esc(j.titulo)}</b>?</p>
+   <p style="font-size:12.5px;color:var(--ink-soft)">Os candidatos ligados a ela não são apagados — ficam como “sem vaga”.</p>
+   <div class="flexbtns"><button class="btn danger" onclick="delJobConfirmed('${id}')">Sim, excluir</button><button class="btn" onclick="editJob('${id}')">Cancelar</button></div>`); }
+function delJobConfirmed(id){ S.jobs=S.jobs.filter(j=>j.id!==id); Store.save(); closeModal(); renderJobs(); badge('vaga excluída'); }
 
 /* ================= PIPELINE (KANBAN) ================= */
 let CURJOB=null;
@@ -520,6 +523,42 @@ function drop(e,st){e.preventDefault();e.currentTarget.classList.remove('over');
 }
 
 /* ================= CANDIDATOS ================= */
+
+/* ===== Candidaturas (link público) ===== */
+function candLink(jobId){ const base=(S.config.candUrl||'').trim(); if(!base){alert('Defina a URL da página de candidatura em Config.');return;}
+  const j=jobId?jobById(jobId):null;
+  const params=(S.config.backendUrl?'?be='+encodeURIComponent(S.config.backendUrl):'?x=1')+(j?'&vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo):'');
+  const url=base+params;
+  openModal('Link de candidatura'+(j?' — '+j.code:' (geral)'),`<p style="font-size:13px;color:var(--ink-soft)">${j?'Link para candidatos se aplicarem a <b>'+esc(j.titulo)+'</b>.':'Link geral de candidatura (o candidato escolhe a área).'} Divulgue onde quiser (LinkedIn, site, e-mail). As candidaturas entram na aba Candidatos.</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns"><a class="btn gold" href="${esc(url)}" target="_blank">Abrir página</a><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replace(/'/g,"\\'")}');badge('link copiado')">Copiar link</button></div>`);
+}
+function candPanelHTML(){
+  const inbox=S._candInbox||[];
+  const btns='<button class="btn" onclick="candLink(\'\')">🔗 Link geral de candidatura</button> <button class="btn ghost" onclick="pullCandidaturas()">Buscar candidaturas na nuvem</button>';
+  if(!inbox.length) return '<div class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between;align-items:center"><div><b>Candidaturas recebidas</b> <span class="tag">nenhuma nova</span></div><div>'+btns+'</div></div></div>';
+  const rows=inbox.map((r,i)=>`<tr><td><b>${esc(r.nome||'—')}</b><br><span class="tag">${esc(r.email||'')}</span></td>
+    <td>${r.vagaTitulo?esc(r.vagaTitulo)+' <span class="tag">'+esc(r.vagaCode||'')+'</span>':(r.areaInteresse?'<span class="tag">'+esc(r.areaInteresse)+'</span>':'<span class="tag">geral</span>')}</td>
+    <td style="font-size:12px">${esc(r.telefone||'')}${r.linkedin?'<br><a href="'+esc(r.linkedin)+'" target="_blank">LinkedIn</a>':''}</td>
+    <td style="max-width:240px;font-size:12px;color:var(--ink-soft)">${esc((r.mensagem||'').slice(0,120))}</td>
+    <td style="white-space:nowrap"><button class="btn sm gold" onclick="addCandidatura(${i})">Adicionar ao pipeline</button> <button class="btn sm ghost" onclick="dismissCandidatura(${i})">Descartar</button></td></tr>`).join('');
+  return `<div class="card" style="margin-bottom:12px;border:2px solid var(--gold)"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div><b>Candidaturas recebidas</b> <span class="tag" style="background:#fbe9ea;color:#8a2e33">${inbox.length}</span></div><div>${btns}</div></div>
+    <table><tr><th>Candidato</th><th>Vaga / área</th><th>Contato</th><th>Sobre</th><th></th></tr>${rows}</table></div>`;
+}
+async function pullCandidaturas(){ const u=S.config.backendUrl; if(!u){alert('Configure o backend primeiro.');return;} badge('buscando candidaturas…');
+  try{ const r=await fetch(u+'?action=load&t='+Date.now()); const j=await r.json();
+    if(j&&j.data&&j.data._candInbox){ S._candInbox=j.data._candInbox; localStorage.setItem(Store.key,JSON.stringify(S)); badge(S._candInbox.length+' candidatura(s)'); renderCands(); }
+    else { badge('nenhuma candidatura na nuvem'); }
+  }catch(e){ badge('erro ao buscar',true); }
+}
+function addCandidatura(i){ const r=(S._candInbox||[])[i]; if(!r)return;
+  let jobId=''; if(r.vagaCode){ const j=S.jobs.find(x=>x.code===r.vagaCode); if(j)jobId=j.id; }
+  const c={id:uid(),jobId:jobId,nome:r.nome||'(sem nome)',email:r.email||'',phone:r.telefone||'',linkedin:r.linkedin||'',
+    source:'Candidatura (site)',stage:'Triagem',createdAt:new Date().toISOString(),
+    statusAtual:'Em processo',motivoSaida:'',cvText:(r.mensagem||'')+(r.areaInteresse?'\n\nÁrea de interesse: '+r.areaInteresse:''),
+    disc:{D:0,I:0,S:0,C:0,done:false},persona:{},principios:[],scRecruiter:{},scManager:{},aderencia:{},notes:'',recommendation:{}};
+  S.candidates.push(c); S._candInbox.splice(i,1); Store.save(); badge('candidato adicionado'); renderCands();
+}
+function dismissCandidatura(i){ (S._candInbox||[]).splice(i,1); Store.save(); renderCands(); }
+
 function candsFiltered(){
   let arr=S.candidates.map(c=>({c,j:jobById(c.jobId)}));
   if(FCAND.vaga) arr=arr.filter(x=>x.c.jobId===FCAND.vaga);
@@ -554,6 +593,7 @@ function renderCands(){
   const statusOpts=['<option value="">Todos os status</option>'].concat((SEED.statusList||[]).map(s=>`<option ${FCAND.status===s?'selected':''}>${s}</option>`)).join('');
   document.getElementById('v-cands').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Candidatos</div><div class="h-sub">${arr.length} de ${S.candidates.length} candidato(s) no filtro.</div></div><div class="row"><button class="btn" onclick="cvImportUI()">⬆ Importar currículo</button><button class="btn gold" onclick="addCand()">+ Candidato</button></div></div>
+  ${candPanelHTML()}
   <div class="card" style="margin-bottom:12px"><div class="row" style="gap:10px;align-items:end">
      <div style="flex:1;min-width:200px"><label>Buscar (nome, e-mail, vaga)</label><input value="${esc(FCAND.q)}" oninput="FCAND.q=this.value;renderCands()"></div>
      <div style="min-width:220px"><label>Vaga</label><select onchange="FCAND.vaga=this.value;renderCands()">${vagaOpts}</select></div>
@@ -851,7 +891,10 @@ function doMove(id){const c=S.candidates.find(x=>x.id===id);const st=document.ge
   c.stage=st;if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j){j.status='fechada';j.filledAt=c.hiredAt;}}Store.save();openCand(id);
   offerStageMessage(id,st);
 }
-function delCand(id){if(!confirm('Excluir este candidato?'))return;S.candidates=S.candidates.filter(x=>x.id!==id);Store.save();closeModal();renderCands();}
+function delCand(id){ const c=S.candidates.find(x=>x.id===id); if(!c)return;
+  openModal('Excluir candidato', `<p style="font-size:14px">Excluir <b>${esc(c.nome)}</b> em definitivo?</p>
+   <div class="flexbtns"><button class="btn danger" onclick="delCandConfirmed('${id}')">Sim, excluir</button><button class="btn" onclick="openCand('${id}')">Cancelar</button></div>`); }
+function delCandConfirmed(id){ S.candidates=S.candidates.filter(x=>x.id!==id); Store.save(); closeModal(); renderCands(); badge('candidato excluído'); }
 
 
 /* ===== Parecer final do candidato: imprimir/PDF e Excel ===== */
@@ -997,6 +1040,7 @@ function renderCfg(){
    <label>URL do backend</label><input id="cfg-url" value="${esc(S.config.backendUrl||'')}" placeholder="https://script.google.com/macros/s/.../exec">
    <label style="margin-top:8px">Página do teste DISC (URL do disc_assino.html hospedado)</label><input id="cfg-disc" value="${esc(S.config.discUrl||'')}" placeholder="https://seu-site.vercel.app/disc_assino.html">
    <label style="margin-top:8px">Página de solicitação de vaga (URL do solicitacao_vaga_assino.html)</label><input id="cfg-req" value="${esc(S.config.reqUrl||'')}" placeholder="https://seu-site.vercel.app/solicitacao_vaga_assino.html">
+   <label style="margin-top:8px">Página de candidatura (URL do candidatura_assino.html)</label><input id="cfg-cand" value="${esc(S.config.candUrl||'')}" placeholder="https://seu-site.vercel.app/candidatura_assino.html">
    <div class="flexbtns"><button class="btn navy" onclick="saveBackend()">Salvar URLs</button>
      <button class="btn gold" onclick="Store.pushVerify()">Salvar na nuvem agora (verificado)</button>
      <button class="btn" onclick="pullNow()">Puxar dados da nuvem</button></div>
@@ -1006,7 +1050,7 @@ function renderCfg(){
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ats_assino_'+new Date().toISOString().slice(0,10)+'.json';a.click();}
 function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{S=JSON.parse(r.result);Store.save();go('dash');badge('importado');}catch(e){alert('Arquivo inválido.');}};r.readAsText(f);}
 function resetData(){if(!confirm('Zerar TODOS os dados deste navegador?'))return;S=seedState();Store.save();go('dash');}
-function saveBackend(){S.config.backendUrl=document.getElementById('cfg-url').value.trim();const du=document.getElementById('cfg-disc');if(du)S.config.discUrl=du.value.trim(); const ru=document.getElementById('cfg-req'); if(ru)S.config.reqUrl=ru.value.trim();Store.save();badge('URLs salvas');}
+function saveBackend(){S.config.backendUrl=document.getElementById('cfg-url').value.trim();const du=document.getElementById('cfg-disc');if(du)S.config.discUrl=du.value.trim(); const ru=document.getElementById('cfg-req'); if(ru)S.config.reqUrl=ru.value.trim(); const cu=document.getElementById('cfg-cand'); if(cu)S.config.candUrl=cu.value.trim();Store.save();badge('URLs salvas');}
 async function pullNow(){badge('puxando...');const ok=await Store.pullBackend();if(ok){badge('nuvem: '+S.jobs.length+' vagas · '+S.candidates.length+' candidatos');}else{badge('nada na nuvem / erro',true);}go('dash');}
 
 
