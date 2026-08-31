@@ -82,6 +82,32 @@ tr:hover td{background:#fafbfe}
 .empty{color:var(--ink-faint);font-size:13px;padding:16px;text-align:center;border:1px dashed var(--line);border-radius:12px}
 .savebadge{font-size:11px;color:#9fb0d8}
 .flexbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+
+.sec.sec-future{opacity:.5}
+.sec.sec-next{border-left:3px solid var(--gold);padding-left:12px;background:linear-gradient(90deg,#fffdf5,transparent);border-radius:8px}
+.sec.sec-done{}
+.sec-badge{display:inline-block;font-size:10px;font-weight:800;border-radius:99px;padding:2px 8px;margin-left:8px;vertical-align:middle;letter-spacing:.02em}
+.sec-badge.n{background:#fff3d6;color:#8a5a12}
+.sec-badge.f{background:#eef1f7;color:#8A92AC}
+.sec-badge.d{background:#eaf3ea;color:#2F7A34}
+
+.stagebar{background:linear-gradient(135deg,#0E204A,#0A1633);border-radius:12px;padding:14px 16px;margin:14px 0 6px;color:#fff}
+.stagebar .steps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.stagebar .st{font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.10);color:#c7d0e8;white-space:nowrap}
+.stagebar .st.done{background:rgba(47,122,52,.35);color:#d7f0d9}
+.stagebar .st.cur{background:var(--gold-bright);color:var(--navy-900)}
+.stagebar .st.next{background:rgba(247,190,50,.18);color:#f7d78a;border:1px dashed var(--gold)}
+.stagebar .ck{font-size:12.5px;margin:3px 0}
+.stagebar .ck .ic{display:inline-block;width:18px}
+.stagebar .ok{color:#7fe08a}.stagebar .no{color:#ffb4b8}
+.sec-badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;padding:2px 8px;border-radius:99px;margin-left:8px;vertical-align:middle}
+.sec-badge.due{background:var(--gold-bright);color:var(--navy-900)}
+.sec-badge.past{background:#eef6ea;color:#256129}
+.sec-badge.future{background:#eef2ff;color:#8A92AC}
+.sec.dimmed{opacity:.5}
+.sec.dimmed:hover{opacity:1;transition:opacity .15s}
+.sec.neednow{border-left:3px solid var(--gold);padding-left:12px;margin-left:-4px}
+
 @media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr}.kanban{grid-template-columns:repeat(9,170px)}}
 </style></head><body>
 <nav><div class="nav-in">
@@ -222,7 +248,7 @@ function compsForFamily(f){
 /* ===== Filtros e utilidades de visualização ===== */
 let FCAND={q:'',vaga:'',etapa:'',status:'',sort:'nome',dir:1};
 let FJOB={q:'',gestor:'',status:''};
-let FPIPE={gestor:'',q:''};
+let FPIPE={gestor:'',q:'',status:'aberta',vaga:'__ALL__'};
 let FDASH={vaga:'',gestor:'',status:['aberta']};
 function jobAge(j){ if(!j.openedAt)return null; const end=(j.status==='fechada'&&j.filledAt)?j.filledAt:new Date().toISOString(); return daysBetween(j.openedAt,end); }
 function uniqGestores(){ return [...new Set(S.jobs.map(j=>j.manager).filter(Boolean))].sort(); }
@@ -317,6 +343,42 @@ function jobsFiltered(){
   if(FJOB.q){const q=FJOB.q.toLowerCase();arr=arr.filter(j=>(j.titulo+' '+j.code+' '+(j.extCode||'')+' '+(j.manager||'')).toLowerCase().includes(q));}
   return arr;
 }
+
+/* ===== Solicitações de abertura de vaga (do gestor) ===== */
+function reqLink(){ const base=(S.config.reqUrl||'').trim(); if(!base){alert('Defina a URL da página de solicitação em Config.');return;}
+  const url=base+(S.config.backendUrl?'?be='+encodeURIComponent(S.config.backendUrl):'');
+  openModal('Link de solicitação de vaga',`<p style="font-size:13px;color:var(--ink-soft)">Envie este link ao gestor (ou cole no Factorial, e-mail, Slack). As solicitações entram aqui como pendentes.</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns"><a class="btn gold" href="${esc(url)}" target="_blank">Abrir formulário</a><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replace(/'/g,"\\'")}');badge('link copiado')">Copiar link</button></div>`);
+}
+function reqPanelHTML(){
+  const inbox=S._vagaInbox||[];
+  const linkBtn='<button class="btn" onclick="reqLink()">🔗 Link p/ gestor solicitar vaga</button> <button class="btn ghost" onclick="pullRequests()">Buscar solicitações na nuvem</button>';
+  if(!inbox.length) return '<div class="card" style="margin:12px 0"><div class="row" style="justify-content:space-between;align-items:center"><div><b>Solicitações de vaga</b> <span class="tag">nenhuma pendente</span></div><div>'+linkBtn+'</div></div></div>';
+  const rows=inbox.map((r,i)=>`<tr><td><b>${esc(r.titulo||'—')}</b><br><span class="tag">${esc((famById(r.familyId)||{}).familia||r.familyId||'')} · ${esc(r.nivel||'')}</span></td>
+    <td>${esc(r.gestor||'—')}</td><td>${esc(r.posicoes||1)} pos · ${esc(r.contrato||'')}<br><span class="tag">${esc(r.formato||'')} ${esc(r.regional||'')}</span></td>
+    <td>${esc(r.tipoVaga||'—')}<br><span class="pill" style="background:${r.aprovadoRH==='Sim'?'#eef6ea':'#fbe9ea'};color:${r.aprovadoRH==='Sim'?'#256129':'#8a2e33'}">RH: ${esc(r.aprovadoRH||'—')}</span></td>
+    <td><span class="pill ${r.urgencia&&r.urgencia.indexOf('Alta')>=0?'aberta':'pausada'}" style="background:${r.urgencia&&r.urgencia.indexOf('Alta')>=0?'#fbe9ea':'#f6efd8'};color:${r.urgencia&&r.urgencia.indexOf('Alta')>=0?'#8a2e33':'#8a5a12'}">${esc(r.urgencia||'—')}</span></td>
+    <td style="max-width:240px;font-size:12px;color:var(--ink-soft)">${esc((r.justificativa||'').slice(0,120))}</td>
+    <td style="white-space:nowrap"><button class="btn sm gold" onclick="convertReq(${i})">Converter em vaga</button> <button class="btn sm ghost" onclick="dismissReq(${i})">Descartar</button></td></tr>`).join('');
+  return `<div class="card" style="margin:12px 0;border:2px solid var(--gold)"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div><b>Solicitações de vaga pendentes</b> <span class="tag" style="background:#fbe9ea;color:#8a2e33">${inbox.length}</span></div><div>${linkBtn}</div></div>
+    <table><tr><th>Cargo</th><th>Gestor</th><th>Detalhes</th><th>Tipo / Aprovação RH</th><th>Urgência</th><th>Justificativa</th><th></th></tr>${rows}</table></div>`;
+}
+async function pullRequests(){ const u=S.config.backendUrl; if(!u){alert('Configure o backend primeiro.');return;} badge('buscando solicitações…');
+  try{ const r=await fetch(u+'?action=load&t='+Date.now()); const j=await r.json();
+    if(j&&j.data&&j.data._vagaInbox){ S._vagaInbox=j.data._vagaInbox; localStorage.setItem(Store.key,JSON.stringify(S)); badge((S._vagaInbox.length)+' solicitação(ões)'); renderJobs(); }
+    else { badge('nenhuma solicitação na nuvem'); }
+  }catch(e){ badge('erro ao buscar',true); }
+}
+function convertReq(i){ const r=(S._vagaInbox||[])[i]; if(!r)return;
+  const fam=r.familyId&&famById(r.familyId)?r.familyId:SEED.families[0].id;
+  const j={id:uid(),familyId:fam,titulo:r.titulo||'(sem título)',nivel:r.nivel||famById(fam).niveis[0],contrato:r.contrato||'CLT',
+    local:r.formato||'Remoto',status:'aberta',recruiter:'',manager:r.gestor||'',requisitos:[],extCode:'',posicoes:Number(r.posicoes)||1,
+    regional:r.regional||'',formato:r.formato||'Remoto',salario:r.salario||'',openedAt:new Date().toISOString(),
+    reqTipoVaga:r.tipoVaga||'',reqAprovadoRH:r.aprovadoRH||'',reqJustificativa:r.justificativa||'',reqUrgencia:r.urgencia||''};
+  j.code=nextCode(fam); S.jobs.push(j);
+  S._vagaInbox.splice(i,1); Store.save(); badge('vaga '+j.code+' criada'); renderJobs();
+}
+function dismissReq(i){ if(!confirm('Descartar esta solicitação?'))return; S._vagaInbox.splice(i,1); Store.save(); renderJobs(); }
+
 function renderJobs(){
   const all=S.jobs; const abertas=all.filter(j=>j.status==='aberta');
   const totalPos=abertas.reduce((a,j)=>a+(j.posicoes||1),0);
@@ -340,6 +402,7 @@ function renderJobs(){
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FJOB.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
   document.getElementById('v-jobs').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Vagas</div><div class="h-sub">Consolidado, filtros e controle de tempo de vaga aberta.</div></div><button class="btn gold" onclick="editJob()">+ Nova vaga</button></div>
+  ${reqPanelHTML()}
   <div class="grid g4" style="margin-bottom:12px">
     <div class="kpi"><div class="v">${abertas.length}</div><div class="l">Vagas abertas</div></div>
     <div class="kpi lite"><div class="v">${totalPos}</div><div class="l">Posições em aberto</div></div>
@@ -400,36 +463,49 @@ function delJob(id){ if(!confirm('Excluir a vaga e manter os candidatos? Os cand
 
 /* ================= PIPELINE (KANBAN) ================= */
 let CURJOB=null;
+function pipeJobs(){
+  let jobs=S.jobs.slice();
+  if(FPIPE.status) jobs=jobs.filter(j=>j.status===FPIPE.status);
+  if(FPIPE.gestor) jobs=jobs.filter(j=>j.manager===FPIPE.gestor);
+  return jobs;
+}
 function renderPipe(){
   if(!S.jobs.length){document.getElementById('v-pipe').innerHTML='<div class="h-title">Pipeline</div><div class="empty">Crie uma vaga primeiro.</div>';return;}
-  // job list filtered by gestor
-  let jobsList=S.jobs.slice();
-  if(FPIPE.gestor) jobsList=jobsList.filter(j=>j.manager===FPIPE.gestor);
-  if(!jobsList.length) jobsList=S.jobs.slice();
-  if(!CURJOB||!jobsList.find(j=>j.id===CURJOB)) CURJOB=jobsList[0].id;
-  const opts=jobsList.map(j=>`<option value="${j.id}" ${j.id===CURJOB?'selected':''}>${esc(j.code)} — ${esc(j.titulo)}${j.manager?' · '+esc(j.manager):''}</option>`).join('');
-  let cs=candsOf(CURJOB);
+  const jobs=pipeJobs();
+  const aggregate = (FPIPE.vaga==='__ALL__');
+  let cs=[], headerInfo='';
+  if(aggregate){
+    const jids=new Set(jobs.map(j=>j.id));
+    cs=S.candidates.filter(c=>jids.has(c.jobId));
+    headerInfo=jobs.length+' vaga(s) '+(FPIPE.status||'de todos os status')+' · '+cs.length+' candidatos';
+  } else {
+    if(!jobs.find(j=>j.id===FPIPE.vaga)){ /* selected vaga not in filter: keep it anyway */ }
+    cs=candsOf(FPIPE.vaga); const j=jobById(FPIPE.vaga); const age=j?jobAge(j):null;
+    headerInfo=j?('Vaga há '+(age!=null?age+'d':'—')+' em aberto · '+cs.length+' candidatos'):'';
+  }
   if(FPIPE.q){const q=FPIPE.q.toLowerCase();cs=cs.filter(c=>(c.nome+' '+(c.source||'')+' '+(c.statusAtual||'')).toLowerCase().includes(q));}
-  const j=jobById(CURJOB); const age=j?jobAge(j):null;
   const cols=STAGES.map(st=>{
     const list=cs.filter(c=>c.stage===st);
-    const items=list.map(c=>{const rc=c.recommendation&&c.recommendation.score!=null?c.recommendation.score:null;
-      return `<div class="kcard" draggable="true" data-c="${c.id}" ondragstart="dragStart(event,'${c.id}')" ondragend="dragEnd(event)" onclick="openCand('${c.id}')"><b>${esc(c.nome)}</b><div class="sc">${rc!=null?'Score '+rc+' · ':''}${esc(c.statusAtual||c.source||'')}</div></div>`;}).join('');
+    const items=list.map(c=>{const rc=c.recommendation&&c.recommendation.score!=null?c.recommendation.score:null; const jc=jobById(c.jobId);
+      return `<div class="kcard" draggable="true" data-c="${c.id}" ondragstart="dragStart(event,'${c.id}')" ondragend="dragEnd(event)" onclick="openCand('${c.id}')"><b>${esc(c.nome)}</b>${aggregate&&jc?'<div class="sc" style="color:var(--blue-600);font-weight:700">'+esc(jc.code)+'</div>':''}<div class="sc">${rc!=null?'Score '+rc+' · ':''}${esc(c.statusAtual||c.source||'')}</div></div>`;}).join('');
     return `<div class="kcol" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event,'${st}')"><h4>${st}<span>${list.length}</span></h4>${items}</div>`;
   }).join('');
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FPIPE.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
+  const statusOpts=[['','Todos os status'],['aberta','Abertas'],['pausada','Pausadas'],['fechada','Fechadas']].map(o=>`<option value="${o[0]}" ${FPIPE.status===o[0]?'selected':''}>${o[1]}</option>`).join('');
+  const vagaOpts=['<option value="__ALL__" '+(aggregate?'selected':'')+'>▸ Todas as vagas do filtro</option>'].concat(jobs.map(j=>`<option value="${j.id}" ${FPIPE.vaga===j.id?'selected':''}>${esc(j.code)} — ${esc(j.titulo)}${j.manager?' · '+esc(j.manager):''}</option>`)).join('');
   document.getElementById('v-pipe').innerHTML=`
-  <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Pipeline</div><div class="h-sub">Arraste candidatos entre etapas. ${j?('Vaga há <b>'+(age!=null?age+'d':'—')+'</b> em aberto · '+cs.length+' candidatos'):''}</div></div>
+  <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Pipeline</div><div class="h-sub">${esc(headerInfo)}</div></div>
   <button class="btn gold" onclick="addCand()">+ Candidato</button></div>
   <div class="card" style="margin-bottom:12px"><div class="row" style="gap:10px;align-items:end">
-     <div style="min-width:200px"><label>Gestor</label><select onchange="FPIPE.gestor=this.value;CURJOB=null;renderPipe()">${gestOpts}</select></div>
-     <div style="min-width:320px"><label>Vaga</label><select onchange="selJob(this.value)">${opts}</select></div>
-     <div style="flex:1;min-width:180px"><label>Buscar candidato</label><input value="${esc(FPIPE.q)}" oninput="FPIPE.q=this.value;renderPipe()"></div>
-     <button class="btn" onclick="cvImportUI('${CURJOB}')">⬆ Currículo</button>
+     <div style="min-width:170px"><label>Status da vaga</label><select onchange="FPIPE.status=this.value;FPIPE.vaga='__ALL__';renderPipe()">${statusOpts}</select></div>
+     <div style="min-width:180px"><label>Gestor</label><select onchange="FPIPE.gestor=this.value;FPIPE.vaga='__ALL__';renderPipe()">${gestOpts}</select></div>
+     <div style="min-width:320px"><label>Vaga</label><select onchange="selJob(this.value)">${vagaOpts}</select></div>
+     <div style="flex:1;min-width:160px"><label>Buscar candidato</label><input value="${esc(FPIPE.q)}" oninput="FPIPE.q=this.value;renderPipe()"></div>
+     ${!aggregate?`<button class="btn" onclick="cvImportUI('${FPIPE.vaga}')">⬆ Currículo</button>`:''}
   </div></div>
   <div class="kanban">${cols}</div>`;
 }
-function selJob(id){CURJOB=id;renderPipe();}
+function selJob(id){FPIPE.vaga=id;CURJOB=id;renderPipe();}
 function dragStart(e,id){DRAG=id;e.target.classList.add('drag');}
 function dragEnd(e){e.target.classList.remove('drag');}
 function dragOver(e){e.preventDefault();e.currentTarget.classList.add('over');}
@@ -516,6 +592,52 @@ function saveCand(){
 function discDom(d){const arr=[['D',d.D],['I',d.I],['S',d.S],['C',d.C]].sort((a,b)=>b[1]-a[1]);return '<b>'+arr[0][0]+'</b> ('+arr[0][0]+arr[1][0]+')';}
 
 /* ---------- Candidate detail (DISC, personas, scorecards, aderência, recomendação) ---------- */
+
+/* (sig marker) */
+function nextChecklist(c){
+  const idx=STAGES.indexOf(c.stage); const next=STAGES[idx+1];
+  if(!next||next==='Reprovado') return {next:null,items:[]};
+  const items=[];
+  if(next==='Triagem') items.push(['Contato + fonte', !!(c.email||c.phone||c.linkedin)]);
+  else if(next==='Fit cultural') items.push(['Currículo OU anotação da triagem', !!((c.cvText&&c.cvText.trim())||(c.notes&&c.notes.trim()))]);
+  else if(next==='Fit técnico'){ items.push(['DISC concluído', !!(c.disc&&c.disc.done)]); items.push(['Fit cultural avaliado', !!((c.persona&&Object.values(c.persona).some(v=>v>0))||(c.principios&&c.principios.some(v=>v>0)))]); }
+  else if(next==='Entrevista') items.push(['Scorecard do Recrutador', scFilled(c,'scRecruiter')]);
+  else if(next==='Shortlist'){ items.push(['Scorecard do Gestor', scFilled(c,'scManager')]); items.push(['Recomendação calculada', !!(c.recommendation&&c.recommendation.score!=null)]); }
+  else if(next==='Proposta') items.push(['Recomendação Contratar / com ressalvas', !!(c.recommendation&&['Contratar','Contratar com ressalvas'].some(d=>(c.recommendation.decision||'').startsWith(d)))]);
+  else if(next==='Contratado') items.push(['Pronto para contratar', true]);
+  return {next,items};
+}
+function tagCandSections(c){
+  const curIdx=STAGES.indexOf(c.stage); const nextIdx=curIdx+1;
+  document.querySelectorAll('#modal-body .sec[data-gate]').forEach(sec=>{
+    const g=sec.getAttribute('data-gate'); const gIdx=STAGES.indexOf(g);
+    sec.classList.remove('sec-next','sec-future','sec-done');
+    let cls='',badge='';
+    if(gIdx===nextIdx){ cls='sec-next'; badge='<span class="sec-badge n">▶ necessário para avançar</span>'; }
+    else if(gIdx>nextIdx){ cls='sec-future'; badge='<span class="sec-badge f">etapa '+esc(g)+'</span>'; }
+    else { cls='sec-done'; badge='<span class="sec-badge d">'+esc(g)+'</span>'; }
+    if(cls)sec.classList.add(cls);
+    const h=sec.querySelector('h4');
+    if(h && !h.querySelector('.sec-badge')) h.insertAdjacentHTML('beforeend',' '+badge);
+  });
+  // top bar
+  const bar=document.getElementById('stage-bar'); if(!bar)return;
+  const {next,items}=nextChecklist(c);
+  const steps=STAGES.filter(s=>s!=='Reprovado');
+  const chips=steps.map(s=>{const i=STAGES.indexOf(s);const st=i<curIdx?'done':(i===curIdx?'cur':'fut');
+    const bg=st==='cur'?'#214498':(st==='done'?'#2F7A34':'#e6ebf5');const col=st==='fut'?'#8A92AC':'#fff';
+    return `<span style="background:${bg};color:${col};border-radius:99px;padding:3px 10px;font-size:11px;font-weight:800;white-space:nowrap">${esc(s)}</span>`;}).join('<span style="color:#c3ccdb">›</span>');
+  const check=next?items.map(it=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px"><span style="width:16px;height:16px;border-radius:50%;background:${it[1]?'#2F7A34':'#E2E6F0'};color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:900">${it[1]?'✓':''}</span><span style="color:${it[1]?'#2F7A34':'#4C5573'}">${esc(it[0])}</span></div>`).join(''):'<div style="font-size:12.5px;color:#4C5573">Etapa final do funil.</div>';
+  const allOk=next&&items.every(it=>it[1]);
+  bar.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#f7f9fd,#eef2fb);margin-bottom:6px">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${chips}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div><div style="font-size:11px;color:var(--ink-faint);font-weight:800;text-transform:uppercase;letter-spacing:.04em">Para avançar${next?' a '+esc(next):''}</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px">${check}</div></div>
+      ${next?`<button class="btn ${allOk?'gold':''}" onclick="moveStage('${c.id}')">Mover para ${esc(next)} ▸</button>`:''}
+    </div></div>`;
+}
+
 function openCand(id){
   const c=S.candidates.find(x=>x.id===id);if(!c)return; window._openCandId=id;const j=jobById(c.jobId);const fam=j?famById(j.familyId):null;
   const comps=fam?compsForFamily(fam):[];
@@ -526,26 +648,27 @@ function openCand(id){
      <div style="text-align:right"><div class="l" style="font-size:11px;color:var(--ink-faint)">RECOMENDAÇÃO</div><div id="c-reco-mini">—</div></div>
    </div>
 
-   <div class="sec"><h4>Status do processo</h4>
+   <div id="stage-bar"></div>
+   <div class="sec" data-gate="Triagem"><h4>Status do processo</h4>
      <div class="grid g3">
        <div><label>Status atual</label><select id="c-status" onchange="saveField('${c.id}','statusAtual',this.value)">${SEED.statusList.map(s=>`<option ${c.statusAtual===s?'selected':''}>${s}</option>`).join('')}</select></div>
        <div><label>Principal motivo de saída do processo</label><input id="c-motivo" list="motivos" value="${esc(c.motivoSaida||'')}" oninput="saveField('${c.id}','motivoSaida',this.value)"><datalist id="motivos">${SEED.motivoList.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></div>
        <div><label>Fonte</label><select id="c-fonte" onchange="saveField('${c.id}','source',this.value)">${SEED.fonteList.map(s=>`<option ${c.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
      </div></div>
-   <div class="sec"><h4>1. Teste DISC</h4>
+   <div class="sec" data-gate="Fit técnico"><h4>1. Teste DISC</h4>
      <div style="margin-bottom:8px"><button class="btn sm" onclick="discLink('${c.id}')">Gerar link p/ candidato</button> <button class="btn sm" onclick="discPaste('${c.id}')">Colar código de resultado</button></div>
      <div id="disc-area"></div></div>
-   <div class="sec"><h4>2. Fit cultural — as personas têm voz</h4><div id="persona-area"></div>
+   <div class="sec" data-gate="Fit técnico"><h4>2. Fit cultural — as personas têm voz</h4><div id="persona-area"></div>
      <div style="margin-top:10px"><label>Aderência aos 8 princípios do revezamento (média)</label><div id="princ-area"></div></div></div>
-   <div class="sec"><h4>3. Aderência de perfil à vaga</h4><div id="ader-area"></div></div>
-   <div class="sec"><h4>4. Entrevista por competência — preparação (STAR)</h4>
+   <div class="sec" data-gate="Fit técnico"><h4>3. Aderência de perfil à vaga</h4><div id="ader-area"></div></div>
+   <div class="sec" data-gate="Entrevista"><h4>4. Entrevista por competência — preparação (STAR)</h4>
      <div class="reco n" style="font-weight:500;font-size:12.5px">${(SEED.star||[]).map(s=>'• '+esc(s)).join('<br>')}</div>
      <p style="font-size:12px;color:var(--ink-soft);margin-top:8px">Nas competências abaixo, clique em <b>ver</b> para as perguntas sugeridas de cada competência. Preencha as notas do <b>recrutador</b> e do <b>gestor</b> — cada um avalia a sua parte.</p></div>
-   <div class="sec"><h4>4a. Scorecard do RECRUTADOR</h4><div id="sc-rec"></div></div>
-   <div class="sec"><h4>4b. Scorecard do GESTOR</h4>
+   <div class="sec" data-gate="Entrevista"><h4>4a. Scorecard do RECRUTADOR</h4><div id="sc-rec"></div></div>
+   <div class="sec" data-gate="Shortlist"><h4>4b. Scorecard do GESTOR</h4>
      <p style="font-size:12px;color:var(--ink-soft)">Esta é a parte do gestor da vaga. Ele avalia as mesmas competências, de forma independente — a recomendação combina as duas visões.</p>
      <div id="sc-man"></div></div>
-   <div class="sec"><h4>6. Pré-avaliação automática &amp; Recomendação de contratação</h4>
+   <div class="sec" data-gate="Shortlist"><h4>6. Pré-avaliação automática &amp; Recomendação de contratação</h4>
      <p style="font-size:12px;color:var(--ink-soft)">Combina fit técnico (scorecards), fit cultural (personas + princípios), aderência à vaga e alinhamento DISC ao cargo.</p>
      <div id="reco-area"></div>
      <div class="flexbtns"><button class="btn navy" onclick="computeReco('${c.id}')">Calcular recomendação</button>
@@ -554,11 +677,58 @@ function openCand(id){
        <button class="btn" onclick="printParecer('${c.id}')">🖨 Imprimir / PDF</button>
        <button class="btn" onclick="excelParecer('${c.id}')">⬇ Excel</button>
        <button class="btn danger" onclick="delCand('${c.id}')">Excluir</button></div></div>
-   ${c.cvText?('<div class="sec"><h4>Currículo (texto extraído)</h4><textarea rows="5" oninput="saveField(\''+c.id+'\',\'cvText\',this.value)">'+esc(c.cvText)+'</textarea></div>'):''}
-   <div class="sec"><label>Anotações</label><textarea id="c-notes" rows="3" oninput="saveField('${c.id}','notes',this.value)">${esc(c.notes||'')}</textarea></div>
+   ${c.cvText?('<div class="sec" data-gate="Fit cultural"><h4>Currículo (texto extraído)</h4><textarea rows="5" oninput="saveField(\''+c.id+'\',\'cvText\',this.value)">'+esc(c.cvText)+'</textarea></div>'):''}
+   <div class="sec" data-gate="Fit cultural"><label>Anotações</label><textarea id="c-notes" rows="3" oninput="saveField('${c.id}','notes',this.value)">${esc(c.notes||'')}</textarea></div>
   `);
   renderDISC(c);renderPersonas(c);renderPrinc(c);renderAder(c,j);renderSC(c,'scRecruiter','sc-rec',comps);renderSC(c,'scManager','sc-man',comps);renderRecoArea(c);
+  tagCandSections(c);
 }
+
+/* ===== Sinalização de etapas na ficha do candidato ===== */
+function nextChecklist(c){
+  const j=jobById(c.jobId);
+  const items={
+   "Triagem":[["Contato (e-mail, telefone ou LinkedIn)",!!(c.email||c.phone||c.linkedin)],["Fonte definida",!!c.source]],
+   "Fit cultural":[["Currículo lido OU anotação da triagem",!!((c.cvText&&c.cvText.trim())||(c.notes&&c.notes.trim()))]],
+   "Fit técnico":[["DISC concluído",discDone(c)],["Fit cultural avaliado (personas/princípios)",cultDone(c)]],
+   "Entrevista":[["Scorecard do Recrutador preenchido",scFilled(c,'scRecruiter')]],
+   "Shortlist":[["Scorecard do Gestor preenchido",scFilled(c,'scManager')],["Recomendação calculada",!!(c.recommendation&&c.recommendation.score!=null)]],
+   "Proposta":[["Recomendação 'Contratar' ou 'com ressalvas'",!!(c.recommendation&&['Contratar','Contratar com ressalvas'].some(d=>(c.recommendation.decision||'').startsWith(d)))]],
+   "Contratado":[["Sem pré-requisitos — mover quando fechar",true]],
+   "Reprovado":[["Sem pré-requisitos",true]],
+  };
+  return items;
+}
+function tagCandSections(c){
+  const curIdx=STAGES.indexOf(c.stage);
+  const nextStage=STAGES[curIdx+1]&&!['Contratado','Reprovado'].includes(c.stage)?STAGES[curIdx+1]:null;
+  // 1) Stage bar
+  const bar=document.getElementById('stage-bar'); 
+  if(bar){
+    const steps=STAGES.filter(s=>!['Reprovado'].includes(s)).map(s=>{const i=STAGES.indexOf(s);
+      let cls=''; if(i<curIdx)cls='done'; else if(i===curIdx)cls='cur'; else if(s===nextStage)cls='next';
+      return `<span class="st ${cls}">${s}</span>`;}).join('');
+    let ck='';
+    if(nextStage){ const list=(nextChecklist(c)[nextStage]||[]);
+      ck=`<div style="font-size:12px;color:#c7d0e8;margin-top:4px">Para avançar para <b style="color:#fff">${nextStage}</b>:</div>`+
+         list.map(it=>`<div class="ck"><span class="ic ${it[1]?'ok':'no'}">${it[1]?'✓':'✗'}</span><span style="color:${it[1]?'#d7f0d9':'#ffd7d9'}">${it[0]}</span></div>`).join('');
+    } else { ck=`<div style="font-size:12px;color:#c7d0e8;margin-top:4px">Etapa final do funil para este candidato.</div>`; }
+    bar.className='stagebar';
+    bar.innerHTML=`<div class="steps">${steps}</div>${ck}`;
+  }
+  // 2) Section badges + dim/highlight
+  document.querySelectorAll('#modal-body .sec[data-gate]').forEach(el=>{
+    const g=el.getAttribute('data-gate'); const gi=STAGES.indexOf(g);
+    const h4=el.querySelector('h4'); 
+    el.classList.remove('dimmed','neednow');
+    let badgeCls='future', badgeTxt='Etapa: '+g;
+    if(gi<=curIdx){ badgeCls='past'; }
+    else if(g===nextStage){ badgeCls='due'; badgeTxt='Necessário agora · '+g; el.classList.add('neednow'); }
+    else { badgeCls='future'; el.classList.add('dimmed'); }
+    if(h4 && !h4.querySelector('.sec-badge')){ h4.insertAdjacentHTML('beforeend',`<span class="sec-badge ${badgeCls}">${badgeTxt}</span>`); }
+  });
+}
+
 function saveField(id,f,v){const c=S.candidates.find(x=>x.id===id);c[f]=v;Store.save();}
 function renderDISC(c){
   const done=c.disc&&c.disc.done;
@@ -825,7 +995,8 @@ function renderCfg(){
    <div class="card" style="margin-top:14px"><h4>Backend centralizado (Fase 2)</h4>
    <p style="font-size:13px;color:var(--ink-soft)">Cole a URL do Web App do Google Apps Script (ou endpoint compatível). Com ela preenchida, o ATS passa a salvar também na nuvem, compartilhado entre recrutadores.</p>
    <label>URL do backend</label><input id="cfg-url" value="${esc(S.config.backendUrl||'')}" placeholder="https://script.google.com/macros/s/.../exec">
-   <label style="margin-top:8px">Página do teste DISC (URL do disc_assino.html hospedado)</label><input id="cfg-disc" value="${esc(S.config.discUrl||'')}" placeholder="https://seu-site.netlify.app/disc_assino.html">
+   <label style="margin-top:8px">Página do teste DISC (URL do disc_assino.html hospedado)</label><input id="cfg-disc" value="${esc(S.config.discUrl||'')}" placeholder="https://seu-site.vercel.app/disc_assino.html">
+   <label style="margin-top:8px">Página de solicitação de vaga (URL do solicitacao_vaga_assino.html)</label><input id="cfg-req" value="${esc(S.config.reqUrl||'')}" placeholder="https://seu-site.vercel.app/solicitacao_vaga_assino.html">
    <div class="flexbtns"><button class="btn navy" onclick="saveBackend()">Salvar URLs</button>
      <button class="btn gold" onclick="Store.pushVerify()">Salvar na nuvem agora (verificado)</button>
      <button class="btn" onclick="pullNow()">Puxar dados da nuvem</button></div>
@@ -835,7 +1006,7 @@ function renderCfg(){
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ats_assino_'+new Date().toISOString().slice(0,10)+'.json';a.click();}
 function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{S=JSON.parse(r.result);Store.save();go('dash');badge('importado');}catch(e){alert('Arquivo inválido.');}};r.readAsText(f);}
 function resetData(){if(!confirm('Zerar TODOS os dados deste navegador?'))return;S=seedState();Store.save();go('dash');}
-function saveBackend(){S.config.backendUrl=document.getElementById('cfg-url').value.trim();const du=document.getElementById('cfg-disc');if(du)S.config.discUrl=du.value.trim();Store.save();badge('URLs salvas');}
+function saveBackend(){S.config.backendUrl=document.getElementById('cfg-url').value.trim();const du=document.getElementById('cfg-disc');if(du)S.config.discUrl=du.value.trim(); const ru=document.getElementById('cfg-req'); if(ru)S.config.reqUrl=ru.value.trim();Store.save();badge('URLs salvas');}
 async function pullNow(){badge('puxando...');const ok=await Store.pullBackend();if(ok){badge('nuvem: '+S.jobs.length+' vagas · '+S.candidates.length+' candidatos');}else{badge('nada na nuvem / erro',true);}go('dash');}
 
 
