@@ -1,0 +1,331 @@
+<!doctype html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dimensionamento · Assino</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1F3864;--navy2:#2E5496;--coral:#D85A30;--ink:#1a2230;--mut:#5b6675;--line:#e2e6ee;--bg:#f4f6fa;--card:#fff;--green:#3B6D11;--greenbg:#eaf3de;--amber:#854F0B;--amberbg:#fbf0dc;--red:#A32D2D;--redbg:#f7e2e2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;font-size:14px;line-height:1.5}
+h1,h2,h3,.arch{font-family:Archivo,sans-serif}
+nav{background:var(--navy);color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.nav-in{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:12px 20px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;background:none;border:0;color:#fff;cursor:pointer;padding:0}
+.mark{width:34px;height:34px;border-radius:8px;background:var(--coral);display:flex;align-items:center;justify-content:center;font-family:Archivo;font-weight:900;font-size:18px;color:#fff}
+.wm{display:flex;flex-direction:column;line-height:1.05;text-align:left}
+.wm b{font-family:Archivo;font-weight:800;font-size:16px;letter-spacing:.02em}
+.wm small{font-size:10.5px;color:#c9d6ea;font-weight:600}
+.navbtns{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+button{font-family:Manrope;font-weight:700;cursor:pointer}
+.btn{background:#fff;color:var(--navy);border:1px solid #cdd6e6;border-radius:9px;padding:8px 13px;font-size:13px;transition:.12s}
+.btn:hover{background:#eef2f9}
+.btn.p{background:var(--coral);color:#fff;border-color:var(--coral)}
+.btn.p:hover{filter:brightness(.95)}
+.btn.ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
+nav .btn{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25)}
+nav .btn:hover{background:rgba(255,255,255,.2)}
+nav .btn.p{background:var(--coral);border-color:var(--coral)}
+.wrap{max-width:1200px;margin:0 auto;padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;box-shadow:0 1px 3px rgba(20,30,50,.04)}
+.card h2{margin:0 0 14px;font-size:15px;color:var(--navy);letter-spacing:.01em;display:flex;align-items:center;gap:8px}
+.card h2 .n{background:var(--navy);color:#fff;width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+label{display:block;font-size:11.5px;font-weight:700;color:var(--mut);margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.f{flex:1;min-width:120px;margin-bottom:12px}
+input[type=text],input[type=number],select{width:100%;border:1px solid #d3dae7;border-radius:9px;padding:9px 10px;font-family:Manrope;font-size:14px;font-weight:600;color:var(--ink);background:#fdfefe}
+input:focus,select:focus{outline:2px solid var(--navy2);outline-offset:0;border-color:var(--navy2)}
+input[type=range]{width:100%;accent-color:var(--coral)}
+.slidew{display:flex;align-items:center;gap:10px}
+.slidew b{font-family:JetBrains Mono;font-size:14px;color:var(--navy);min-width:42px;text-align:right}
+.seg{display:inline-flex;background:#eef1f7;border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;background:none;padding:7px 14px;border-radius:8px;font-size:13px;color:var(--mut)}
+.seg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.chip{border:1px solid #cdd6e6;background:#fff;border-radius:20px;padding:6px 14px;font-size:12.5px;color:var(--navy)}
+.chip:hover{background:#eef2f9}
+table{width:100%;border-collapse:collapse;margin-top:4px}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--mut);text-align:left;padding:4px 6px;font-weight:800}
+td{padding:3px 4px}
+.arow td input{padding:7px 8px;font-size:13px}
+.tc{text-align:center}.tr{text-align:right}
+.prod{font-family:JetBrains Mono;font-weight:700;color:var(--navy2);font-size:13px}
+.del{background:#fbecec;color:#b23;border:0;border-radius:7px;width:28px;height:30px;font-size:15px;line-height:1}
+.del:hover{background:#f6d9d9}
+.sumline{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 12px;background:var(--greenbg);border-radius:10px}
+.sumline b{font-family:JetBrains Mono;font-size:16px;color:var(--green)}
+.results{position:sticky;top:78px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kpi{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);font-weight:800}
+.kpi .v{font-family:JetBrains Mono;font-weight:700;font-size:22px;color:var(--navy);margin-top:2px}
+.kpi.big{grid-column:1/-1;background:var(--navy);border-color:var(--navy)}
+.kpi.big .l{color:#c9d6ea}.kpi.big .v{color:#fff;font-size:40px}
+.kpi.big .sub{color:#9db4d6;font-size:12px;font-weight:600;font-family:Manrope}
+.kpi.hl .v{color:var(--coral)}
+.mut{color:var(--mut);font-size:12px}
+.note{font-size:11.5px;color:var(--mut);margin-top:8px;line-height:1.45}
+.saved{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.said{display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:7px 10px}
+.said span{flex:1;font-weight:700;font-size:13px}
+.said button{border:0;background:#eef2f9;border-radius:7px;padding:5px 9px;font-size:12px;color:var(--navy)}
+.said button:hover{background:#e0e8f5}
+.said button.d{background:#fbecec;color:#b23}
+.modalbg{position:fixed;inset:0;background:rgba(15,25,45,.55);display:none;align-items:center;justify-content:center;z-index:40;padding:20px}
+.modalbg.on{display:flex}
+.modal{background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:88vh;overflow:auto;padding:22px}
+.modal h3{margin:0 0 4px;color:var(--navy);font-size:18px}
+.rho-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--mut);margin-top:6px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+.badge{display:inline-block;font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px}
+.foot{max-width:1200px;margin:0 auto;padding:8px 20px 30px;color:var(--mut);font-size:11.5px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+@media print{nav .navbtns,.presets,.del,.addbtn,#savedcard,.hideprint{display:none!important}.wrap{display:block}.card{break-inside:avoid;box-shadow:none;margin-bottom:14px}.results{position:static}}
+</style></head><body>
+<nav><div class="nav-in">
+<button class="brand" onclick="scrollTo(0,0)"><span class="mark">A</span><span class="wm"><b>DIMENSIONAMENTO</b><small>Assino · A Velocidade da Chave</small></span></button>
+<div class="navbtns">
+<button class="btn" onclick="openPeak()">Validar fator de pico</button>
+<button class="btn" onclick="newArea()">Nova área</button>
+<button class="btn" onclick="saveArea()">Salvar área</button>
+<button class="btn" onclick="window.print()">Imprimir / PDF</button>
+<button class="btn" onclick="exportJSON()">Exportar</button>
+<button class="btn" onclick="document.getElementById('imp').click()">Importar</button>
+<input id="imp" type="file" accept="application/json" style="display:none" onchange="importJSON(event)">
+</div></div></nav>
+
+<div class="wrap">
+<!-- LEFT: inputs -->
+<div>
+  <div class="card">
+    <h2><span class="n">1</span> Parâmetros globais</h2>
+    <div class="presets">
+      <span class="mut" style="align-self:center;font-weight:700">Cenário:</span>
+      <button class="chip" onclick="preset('cons')">Conservador</button>
+      <button class="chip" onclick="preset('base')">Base</button>
+      <button class="chip" onclick="preset('enx')">Enxuto</button>
+    </div>
+    <div class="row">
+      <div class="f"><label>Min/mês por analista</label><input type="number" id="minMes" value="11520" oninput="recalc()"></div>
+      <div class="f"><label>Dias úteis/mês</label><input type="number" id="dias" value="21" oninput="recalc()"></div>
+    </div>
+    <div class="f"><label>Ocupação real <span id="ocupL" class="prod"></span></label>
+      <div class="slidew"><input type="range" id="ocup" min="60" max="100" value="80" oninput="recalc()"><b id="ocupB">80%</b></div></div>
+    <div class="row">
+      <div class="f"><label>Férias %</label><input type="number" id="fer" value="8.33" step="0.1" oninput="recalc()"></div>
+      <div class="f"><label>Absenteísmo %</label><input type="number" id="abs" value="5" step="0.5" oninput="recalc()"></div>
+      <div class="f"><label>Treino/vaga %</label><input type="number" id="tre" value="3" step="0.5" oninput="recalc()"></div>
+    </div>
+    <div class="note">Shrinkage total: <b id="shrinkV" class="prod"></b> — capacidade indisponível no ano (férias + faltas + treino).</div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h2><span class="n">2</span> Área / papel</h2>
+    <div class="f"><label>Nome da área ou papel</label><input type="text" id="anome" value="Exemplo — Pós-venda" oninput="recalc()"></div>
+    <div class="row">
+      <div class="f"><label>Tipo de trabalho</label>
+        <div class="seg"><button id="t-prazo" class="on" onclick="setTipo('prazo')">Prazo (deadline)</button><button id="t-fila" onclick="setTipo('fila')">Fila (ticket)</button></div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="f"><label>Volume mensal</label><input type="number" id="vol" value="200" oninput="recalc()"></div>
+      <div class="f"><label>SLA da fase (dias úteis)</label><input type="number" id="sla" value="10" oninput="recalc()"></div>
+    </div>
+    <div class="row">
+      <div class="f" id="f-pico"><label>Fator de pico <span class="mut" title="pico ÷ média da demanda diária, na janela do SLA. Use o botão 'Validar fator de pico'.">ⓘ</span></label><input type="number" id="pico" value="1.5" step="0.05" oninput="recalc()"></div>
+      <div class="f" id="f-rho" style="display:none"><label>Ocupação-alvo ρ <span class="mut" title="teto de ocupação da fila. 80-85% típico. Acima disso o tempo de espera dispara.">ⓘ</span></label>
+        <div class="slidew"><input type="range" id="rho" min="70" max="98" value="85" oninput="recalc()"><b id="rhoB">85%</b></div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h2><span class="n">3</span> Atividades</h2>
+    <table><thead><tr><th>Atividade</th><th class="tc" style="width:80px">Tempo (min)</th><th class="tc" style="width:70px">Fator</th><th class="tc" style="width:80px">min×fator</th><th style="width:34px"></th></tr></thead>
+    <tbody id="acts"></tbody></table>
+    <button class="btn addbtn" style="margin-top:10px" onclick="addRow()">+ Adicionar atividade</button>
+    <div class="sumline"><span style="font-weight:800;color:var(--green)">Σ minutos por contrato</span><b id="stfV">0</b></div>
+  </div>
+
+  <div class="card" id="savedcard" style="margin-top:18px">
+    <h2><span class="n">★</span> Áreas salvas</h2>
+    <div class="mut" style="margin-bottom:6px">Salvas neste navegador. Use “Exportar” para compartilhar ou fazer backup.</div>
+    <div class="saved" id="savedList"></div>
+  </div>
+</div>
+
+<!-- RIGHT: results -->
+<div>
+  <div class="results">
+  <div class="card">
+    <h2 id="resTitle">Resultado</h2>
+    <div class="kpis">
+      <div class="kpi big"><div class="l">Headcount a contratar</div><div class="v" id="hc">0</div><div class="sub" id="hcSub"></div></div>
+      <div class="kpi"><div class="l">Analistas por esforço</div><div class="v" id="nEsf">0</div></div>
+      <div class="kpi hl"><div class="l">Analistas por SLA</div><div class="v" id="nSla">0</div></div>
+      <div class="kpi"><div class="l">Carteira por analista</div><div class="v" id="cart">0</div><div class="sub mut">clientes simultâneos</div></div>
+      <div class="kpi"><div class="l">Vazão por analista</div><div class="v" id="vaz">0</div><div class="sub mut">contratos/dia</div></div>
+    </div>
+    <div class="note" id="explain"></div>
+  </div>
+
+  <div class="card" style="margin-top:18px" id="rhoCard">
+    <h2>Ocupação × tempo de espera</h2>
+    <svg id="rhoSvg" viewBox="0 0 460 240" style="width:100%;height:auto"></svg>
+    <div class="rho-legend"><span><span class="dot" style="background:#c6e0b4"></span>≤85% seguro</span><span><span class="dot" style="background:#fac775"></span>85–90% risco</span><span><span class="dot" style="background:#f2b0b0"></span>&gt;90% colapso</span></div>
+    <div class="note" id="rhoNote"></div>
+  </div>
+  </div>
+</div>
+</div>
+
+<div class="foot"><span>Dimensionamento da Força de Trabalho · Assino</span><span>Esforço + SLA + Carteira · uso interno</span></div>
+
+<!-- peak modal -->
+<div class="modalbg" id="peakbg"><div class="modal">
+  <h3>Validar o fator de pico</h3>
+  <p class="mut">Cole o volume que entrou <b>por dia</b> (um por linha), só nos dias em que a área opera. O fator sai do seu histórico.</p>
+  <textarea id="peakData" rows="7" style="width:100%;border:1px solid #d3dae7;border-radius:10px;padding:10px;font-family:JetBrains Mono;font-size:13px" placeholder="Ex.:&#10;247&#10;322&#10;193&#10;..."></textarea>
+  <button class="btn p" style="margin-top:10px" onclick="calcPeak()">Calcular</button>
+  <div id="peakOut" style="margin-top:14px"></div>
+  <div style="text-align:right;margin-top:14px"><button class="btn" onclick="closePeak()">Fechar</button></div>
+</div></div>
+
+<script>
+var KEY='dim_areas_v1';
+var store=(function(){var mem={},ok=false;try{localStorage.setItem('__t','1');localStorage.removeItem('__t');ok=true}catch(e){}
+ return{get:function(k){if(ok){try{return localStorage.getItem(k)}catch(e){}}return mem[k]||null},
+ set:function(k,v){if(ok){try{localStorage.setItem(k,v);return}catch(e){}}mem[k]=v},
+ del:function(k){if(ok){try{localStorage.removeItem(k);return}catch(e){}}delete mem[k]}}})();
+var tipo='prazo';
+var SEED=[["Vendas novas",15,0.9],["Acompanhamento WPP/e-mail",30,1],["Negociação",15,0.5],["Conferência pós-assinatura",30,1],["Cobrar pagamento custas",10,0.66]];
+
+function num(id){return parseFloat(document.getElementById(id).value)||0}
+function br(n,d){return (n||0).toLocaleString('pt-BR',{minimumFractionDigits:d||0,maximumFractionDigits:d||0})}
+
+function addRow(nome,tempo,fator){
+ var tb=document.getElementById('acts');
+ var tr=document.createElement('tr');tr.className='arow';
+ tr.innerHTML='<td><input type="text" class="a-nome" value="'+(nome||'')+'"></td>'+
+  '<td><input type="number" class="a-tempo tc" value="'+(tempo!=null?tempo:'')+'" oninput="recalc()"></td>'+
+  '<td><input type="number" class="a-fator tc" step="0.01" value="'+(fator!=null?fator:'')+'" oninput="recalc()"></td>'+
+  '<td class="tc prod a-prod">0</td>'+
+  '<td><button class="del" onclick="this.closest(\'tr\').remove();recalc()">×</button></td>';
+ tb.appendChild(tr);recalc();
+}
+function readActs(){var out=[];document.querySelectorAll('#acts .arow').forEach(function(r){
+ out.push([r.querySelector('.a-nome').value, parseFloat(r.querySelector('.a-tempo').value)||0, parseFloat(r.querySelector('.a-fator').value)||0]);});return out}
+
+function setTipo(t){tipo=t;
+ document.getElementById('t-prazo').className=t=='prazo'?'on':'';
+ document.getElementById('t-fila').className=t=='fila'?'on':'';
+ document.getElementById('f-pico').style.display=t=='prazo'?'':'none';
+ document.getElementById('f-rho').style.display=t=='fila'?'':'none';
+ document.getElementById('rhoCard').style.display=t=='fila'?'':'none';
+ recalc();}
+
+function preset(p){
+ var o={cons:[75,1.7,80,18],base:[80,1.5,85,16.33],enx:[88,1.2,90,12]}[p];
+ document.getElementById('ocup').value=o[0];
+ document.getElementById('pico').value=o[1];
+ document.getElementById('rho').value=o[2];
+ // split shrink into fer/abs/tre keeping férias fixed
+ var sh=o[3];document.getElementById('fer').value=8.33;
+ var rest=sh-8.33;document.getElementById('abs').value=(rest*0.6).toFixed(1);document.getElementById('tre').value=(rest*0.4).toFixed(1);
+ recalc();
+}
+
+function recalc(){
+ var minMes=num('minMes'),dias=num('dias')||1,ocup=num('ocup')/100;
+ var shrink=(num('fer')+num('abs')+num('tre'))/100;
+ document.getElementById('ocupB').textContent=Math.round(ocup*100)+'%';
+ document.getElementById('rhoB').textContent=num('rho')+'%';
+ document.getElementById('shrinkV').textContent=(shrink*100).toFixed(1)+'%';
+ // activities
+ var stf=0;document.querySelectorAll('#acts .arow').forEach(function(r){
+  var t=parseFloat(r.querySelector('.a-tempo').value)||0,f=parseFloat(r.querySelector('.a-fator').value)||0;
+  r.querySelector('.a-prod').textContent=br(t*f,2);stf+=t*f;});
+ document.getElementById('stfV').textContent=br(stf,1);
+ var vol=num('vol'),sla=num('sla'),pico=num('pico'),rho=num('rho')/100;
+ var capEff=minMes*ocup*(1-shrink);
+ var capDay=minMes/dias*ocup;
+ var effort=vol*stf;
+ var nEsf=capEff>0?effort/capEff:0;
+ var nSla=tipo=='fila'?(rho>0?nEsf/rho:0):nEsf*pico;
+ var nFin=Math.max(nEsf,nSla);
+ var hc=Math.ceil(nFin-1e-9);
+ var cart=stf>0?sla*capDay/stf:0;
+ var vaz=stf>0?capDay/stf:0;
+ document.getElementById('resTitle').textContent='Resultado — '+document.getElementById('anome').value;
+ document.getElementById('hc').textContent=hc;
+ document.getElementById('hcSub').textContent='ideal contínuo '+br(nFin,2)+' · '+(tipo=='fila'?'fila':'prazo');
+ document.getElementById('nEsf').textContent=br(nEsf,2);
+ document.getElementById('nSla').textContent=br(nSla,2);
+ document.getElementById('cart').textContent=br(cart,0);
+ document.getElementById('vaz').textContent=br(vaz,1);
+ var ex=tipo=='fila'
+  ? 'Fila: preciso operar abaixo de 100% p/ segurar a espera → analistas = esforço ÷ ρ ('+br(nEsf,2)+' ÷ '+Math.round(rho*100)+'% = '+br(nSla,2)+').'
+  : 'Prazo: dimensiono para o pico → analistas = esforço × fator de pico ('+br(nEsf,2)+' × '+pico+' = '+br(nSla,2)+').';
+ document.getElementById('explain').innerHTML='Cada analista sustenta ~<b>'+br(cart,0)+'</b> clientes simultâneos e conclui ~<b>'+br(vaz,1)+'</b>/dia. '+ex;
+ drawRho(rho);
+}
+
+function drawRho(rhoNow){
+ var W=460,H=240,x0=44,x1=440,y0=200,y1=24;
+ function X(r){return x0+(x1-x0)*(r-0.5)/0.5}
+ function Yv(w){return y0-(y0-y1)*Math.min(w,20)/20}
+ var s='';
+ s+='<rect x="'+X(0.5)+'" y="'+y1+'" width="'+(X(0.85)-X(0.5))+'" height="'+(y0-y1)+'" fill="#c6e0b4" opacity=".5"/>';
+ s+='<rect x="'+X(0.85)+'" y="'+y1+'" width="'+(X(0.90)-X(0.85))+'" height="'+(y0-y1)+'" fill="#fac775" opacity=".55"/>';
+ s+='<rect x="'+X(0.90)+'" y="'+y1+'" width="'+(X(1)-X(0.90))+'" height="'+(y0-y1)+'" fill="#f2b0b0" opacity=".55"/>';
+ s+='<line x1="'+x0+'" y1="'+y0+'" x2="'+x1+'" y2="'+y0+'" stroke="#98a2b3"/><line x1="'+x0+'" y1="'+y1+'" x2="'+x0+'" y2="'+y0+'" stroke="#98a2b3"/>';
+ var d='';for(var r=0.5;r<=0.965;r+=0.01){var w=r/(1-r);d+=(d?'L':'M')+X(r).toFixed(1)+','+Yv(w).toFixed(1)+' '}
+ s+='<path d="'+d+'" fill="none" stroke="#D85A30" stroke-width="3" stroke-linejoin="round"/>';
+ [0.5,0.7,0.85,0.9,0.95,1].forEach(function(r){s+='<text x="'+X(r)+'" y="'+(y0+16)+'" font-size="10" fill="#5b6675" text-anchor="middle" font-family="JetBrains Mono">'+Math.round(r*100)+'%</text>'});
+ s+='<text x="'+x0+'" y="16" font-size="10" fill="#5b6675" font-family="Manrope">espera relativa (×)</text>';
+ if(tipo=='fila'){var w=Math.min(rhoNow/(1-rhoNow),20);s+='<line x1="'+X(rhoNow)+'" y1="'+y0+'" x2="'+X(rhoNow)+'" y2="'+Yv(w)+'" stroke="#1F3864" stroke-dasharray="3 3"/><circle cx="'+X(rhoNow)+'" cy="'+Yv(w)+'" r="5" fill="#1F3864"/><text x="'+(X(rhoNow)-8)+'" y="'+(Yv(w)-8)+'" font-size="11" font-weight="700" fill="#1F3864" text-anchor="end" font-family="JetBrains Mono">'+(rhoNow/(1-rhoNow)).toFixed(1)+'×</text>';
+  document.getElementById('rhoNote').innerHTML='Seu ρ alvo está em <b>'+Math.round(rhoNow*100)+'%</b> → espera ~'+(rhoNow/(1-rhoNow)).toFixed(1)+'× o piso. Acima de ~85% a curva vira parede.';}
+ document.getElementById('rhoSvg').innerHTML=s;
+}
+
+/* saved areas */
+function getSaved(){try{return JSON.parse(store.get(KEY)||'{}')}catch(e){return{}}}
+function renderSaved(){var s=getSaved(),el=document.getElementById('savedList'),names=Object.keys(s);
+ if(!names.length){el.innerHTML='<div class="mut">Nenhuma área salva ainda.</div>';return}
+ el.innerHTML='';names.forEach(function(n){var d=document.createElement('div');d.className='said';
+  d.innerHTML='<span>'+n+'</span><button onclick="loadArea(\''+n.replace(/'/g,"\\'")+'\')">Abrir</button><button class="d" onclick="delArea(\''+n.replace(/'/g,"\\'")+'\')">Excluir</button>';el.appendChild(d);});}
+function snapshot(){return{nome:document.getElementById('anome').value,tipo:tipo,vol:num('vol'),sla:num('sla'),pico:num('pico'),rho:num('rho'),
+ params:{minMes:num('minMes'),dias:num('dias'),ocup:num('ocup'),fer:num('fer'),abs:num('abs'),tre:num('tre')},acts:readActs()}}
+function applySnap(a){document.getElementById('anome').value=a.nome||'Área';
+ ['vol','sla','pico','rho'].forEach(function(k){if(a[k]!=null)document.getElementById(k).value=a[k]});
+ if(a.params){for(var k in a.params)if(document.getElementById(k))document.getElementById(k).value=a.params[k]}
+ document.getElementById('acts').innerHTML='';(a.acts||SEED).forEach(function(r){addRow(r[0],r[1],r[2])});
+ setTipo(a.tipo||'prazo');}
+function saveArea(){var a=snapshot();if(!a.nome){alert('Dê um nome à área.');return}var s=getSaved();s[a.nome]=a;store.set(KEY,JSON.stringify(s));renderSaved();flash('Área “'+a.nome+'” salva.');}
+function loadArea(n){var s=getSaved();if(s[n]){applySnap(s[n]);scrollTo(0,0)}}
+function delArea(n){if(!confirm('Excluir “'+n+'”?'))return;var s=getSaved();delete s[n];store.set(KEY,JSON.stringify(s));renderSaved();}
+function newArea(){applySnap({nome:'Nova área',tipo:'prazo',vol:100,sla:10,pico:1.5,rho:85,acts:[['',null,null],['',null,null],['',null,null]]});}
+function flash(m){var f=document.createElement('div');f.textContent=m;f.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1F3864;color:#fff;padding:10px 18px;border-radius:10px;font-weight:700;z-index:60;box-shadow:0 4px 14px rgba(0,0,0,.2)';document.body.appendChild(f);setTimeout(function(){f.remove()},1800);}
+
+function exportJSON(){var data={area:snapshot(),saved:getSaved()};var b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+ var u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='dimensionamento_assino.json';a.click();URL.revokeObjectURL(u);}
+function importJSON(ev){var f=ev.target.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){try{var d=JSON.parse(rd.result);
+ if(d.saved){store.set(KEY,JSON.stringify(Object.assign(getSaved(),d.saved)));renderSaved()}if(d.area)applySnap(d.area);flash('Importado.');}catch(e){alert('Arquivo inválido.')}};rd.readAsText(f);ev.target.value='';}
+
+/* peak */
+function openPeak(){document.getElementById('peakbg').classList.add('on')}
+function closePeak(){document.getElementById('peakbg').classList.remove('on')}
+function pctl(a,p){a=a.slice().sort(function(x,y){return x-y});var n=a.length;if(!n)return 0;var r=p*(n-1),lo=Math.floor(r),fr=r-lo;return a[lo]+(a[lo+1]!=null?fr*(a[lo+1]-a[lo]):0)}
+function calcPeak(){var v=document.getElementById('peakData').value.split(/[\s,;]+/).map(parseFloat).filter(function(x){return!isNaN(x)});
+ if(v.length<3){document.getElementById('peakOut').innerHTML='<div class="mut">Cole ao menos alguns dias.</div>';return}
+ var mean=v.reduce(function(a,b){return a+b},0)/v.length,mx=Math.max.apply(null,v),p90=pctl(v,.9),p95=pctl(v,.95);
+ document.getElementById('peakOut').innerHTML='<div class="kpis"><div class="kpi"><div class="l">Dias</div><div class="v">'+v.length+'</div></div>'+
+ '<div class="kpi"><div class="l">Média/dia</div><div class="v">'+br(mean,0)+'</div></div>'+
+ '<div class="kpi"><div class="l">Fator P90</div><div class="v hl" style="color:#D85A30">'+br(p90/mean,2)+'</div></div>'+
+ '<div class="kpi"><div class="l">Fator P95</div><div class="v" style="color:#D85A30">'+br(p95/mean,2)+'</div></div></div>'+
+ '<div class="note">Recomendado: <b>'+br(p90/mean,2)+' a '+br(p95/mean,2)+'</b> (P90–P95). Máximo isolado = '+br(mx/mean,2)+' (não use). '+
+ '<button class="btn p" style="margin-top:8px" onclick="document.getElementById(\'pico\').value='+(p90/mean).toFixed(2)+';setTipo(\'prazo\');closePeak();flash(\'Fator aplicado.\')">Aplicar '+br(p90/mean,2)+' à área</button></div>';}
+
+/* init */
+document.getElementById('acts').innerHTML='';SEED.forEach(function(r){addRow(r[0],r[1],r[2])});
+setTipo('prazo');renderSaved();recalc();
+document.getElementById('anome').addEventListener('input',recalc);
+</script></body></html>
