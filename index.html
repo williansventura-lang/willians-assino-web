@@ -443,7 +443,7 @@ function renderJobs(){
     <td><span class="pill ${j.status}">${j.status}</span></td>
     <td>${candsOf(j.id).length}</td>
     <td style="font-weight:800;color:${ageCls||'#4C5573'}">${age==null?'—':age+'d'}</td>
-    <td style="white-space:nowrap"><button class="btn sm" onclick="editJob('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="go('pipe');setTimeout(()=>selJob('${j.id}'),50)">Pipeline</button> <button class="btn sm ghost" onclick="candLink('${j.id}')">🔗 Candidatura</button></td></tr>`;}).join('');
+    <td style="white-space:nowrap"><button class="btn sm" onclick="editJob('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="go('pipe');setTimeout(()=>selJob('${j.id}'),50)">Pipeline</button> <button class="btn sm ghost" onclick="candLink('${j.id}')">🔗 Candidatura</button> <button class="btn sm ghost" onclick="preLink('${j.id}')">🧭 Pré-triagem</button></td></tr>`;}).join('');
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FJOB.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
   document.getElementById('v-jobs').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Vagas</div><div class="h-sub">Consolidado, filtros e controle de tempo de vaga aberta.</div></div><button class="btn gold" onclick="editJob()">+ Nova vaga</button></div>
@@ -576,6 +576,52 @@ function drop(e,st){e.preventDefault();e.currentTarget.classList.remove('over');
 /* ================= CANDIDATOS ================= */
 
 /* ===== Candidaturas (link público) ===== */
+
+function preLink(jobId){ const base=(S.config.preUrl||'').trim(); if(!base){alert('Defina a URL da página de pré-triagem em Config.');return;}
+  const j=jobId?jobById(jobId):null; if(!j){alert('Selecione uma vaga.');return;}
+  const reqs=(j.requisitos||[]).map(r=>({txt:r.txt,must:!!r.must}));
+  const rb64=btoa(unescape(encodeURIComponent(JSON.stringify(reqs))));
+  const salTeto=(function(){ const m=(j.salario||'').replace(/[^0-9]/g,''); return m?Number(m):0; })();
+  const params='?vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo)+'&r='+encodeURIComponent(rb64)+(salTeto?'&sal='+salTeto:'')+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'');
+  const url=base+params;
+  openModal('Link de pré-triagem — '+j.code,`<p style="font-size:13px;color:var(--ink-soft)">Envie ao candidato. Ele responde a entrevista inicial + DISC e o resultado, com a pré-análise, entra na aba Candidatos.</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns"><a class="btn gold" href="${esc(url)}" target="_blank">Abrir</a><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replace(/'/g,"\\'")}');badge('link copiado')">Copiar link</button></div>`);
+}
+function preInboxHTML(){
+  const inbox=S._triagemInbox||[];
+  const btns='<button class="btn ghost" onclick="pullPretriagem()">Buscar pré-triagens na nuvem</button>';
+  if(!inbox.length) return '<div class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between;align-items:center"><div><b>Pré-triagens recebidas</b> <span class="tag">nenhuma nova</span></div><div>'+btns+'</div></div></div>';
+  const rows=inbox.map((r,i)=>{const cls=r.preDecision==='Seguir'?'aberta':(r.preDecision==='Não seguir'?'fechada':'pausada');
+    return `<tr><td><b>${esc(r.nome||'—')}</b><br><span class="tag">${esc(r.email||'')}</span></td>
+    <td>${esc(r.vagaTitulo||'')} <span class="tag">${esc(r.vagaCode||'')}</span></td>
+    <td><b>${r.preScore!=null?r.preScore:'—'}</b></td>
+    <td><span class="pill ${cls}">${esc(r.preDecision||'—')}</span>${(r.preFlags&&r.preFlags.length)?'<br><span class="tag" style="background:#fbe9ea;color:#8a2e33">'+esc(r.preFlags[0])+'</span>':''}</td>
+    <td style="white-space:nowrap"><button class="btn sm gold" onclick="addPretriagem(${i})">Ver / adicionar</button> <button class="btn sm ghost" onclick="dismissPretriagem(${i})">Descartar</button></td></tr>`;}).join('');
+  return `<div class="card" style="margin-bottom:12px;border:2px solid var(--gold)"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div><b>Pré-triagens recebidas</b> <span class="tag" style="background:#fbe9ea;color:#8a2e33">${inbox.length}</span></div><div>${btns}</div></div>
+    <table><tr><th>Candidato</th><th>Vaga</th><th>Score</th><th>Pré-análise</th><th></th></tr>${rows}</table></div>`;
+}
+async function pullPretriagem(){ const u=S.config.backendUrl; if(!u){alert('Configure o backend.');return;} badge('buscando pré-triagens…');
+  try{ const r=await fetch(u+'?action=load&t='+Date.now()); const j=await r.json();
+    if(j&&j.data&&j.data._triagemInbox){ S._triagemInbox=j.data._triagemInbox; localStorage.setItem(Store.key,JSON.stringify(S)); badge(S._triagemInbox.length+' pré-triagem(ns)'); renderCands(); }
+    else badge('nenhuma pré-triagem na nuvem');
+  }catch(e){ badge('erro ao buscar',true); }
+}
+function addPretriagem(i){ const r=(S._triagemInbox||[])[i]; if(!r)return;
+  let jobId=''; if(r.vagaCode){ const j=S.jobs.find(x=>x.code===r.vagaCode); if(j)jobId=j.id; }
+  const resumo=[
+    'PRÉ-TRIAGEM ('+(r.preDecision||'')+' · score '+(r.preScore!=null?r.preScore:'-')+')',
+    (r.preFlags&&r.preFlags.length)?('Alertas: '+r.preFlags.join('; ')):'',
+    'Experiência: '+(r.anosExp||'-')+' anos · Pretensão: R$ '+(r.pretensao||'-')+' · Início: '+(r.inicio||'-')+' · Aceita formato: '+(r.aceitaFormato||'-'),
+    'Requisitos: '+((r.reqRespostas||[]).map(x=>x.req+': '+(x.atende?'sim':'não')+(x.must?' (obrig.)':'')).join(' | ')),
+    'Motivo: '+(r.motivo||'-'),
+    'Entrega de orgulho: '+(r.entrega||'-')
+  ].filter(Boolean).join('\n');
+  const c={id:uid(),jobId:jobId,nome:r.nome||'(sem nome)',email:r.email||'',phone:r.telefone||'',linkedin:r.linkedin||'',
+    source:'Pré-triagem (link)',stage:'Triagem',createdAt:new Date().toISOString(),statusAtual:'Em processo',motivoSaida:'',
+    cvText:'',notes:resumo,disc:{D:0,I:0,S:0,C:0,done:false},persona:{},principios:[],scRecruiter:{},scManager:{},aderencia:{},techTests:[],recommendation:{}};
+  S.candidates.push(c); S._triagemInbox.splice(i,1); Store.save(); badge('candidato adicionado (Triagem)'); renderCands(); openCand(c.id);
+}
+function dismissPretriagem(i){ (S._triagemInbox||[]).splice(i,1); Store.save(); renderCands(); }
+
 function candLink(jobId){ const base=(S.config.candUrl||'').trim(); if(!base){alert('Defina a URL da página de candidatura em Config.');return;}
   const j=jobId?jobById(jobId):null;
   const params=(S.config.backendUrl?'?be='+encodeURIComponent(S.config.backendUrl):'?x=1')+(j?'&vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo):'');
@@ -646,6 +692,7 @@ function renderCands(){
   document.getElementById('v-cands').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Candidatos</div><div class="h-sub">${arr.length} de ${S.candidates.length} candidato(s) no filtro.</div></div><div class="row"><button class="btn" onclick="cvImportUI()">⬆ Importar currículo</button><button class="btn gold" onclick="addCand()">+ Candidato</button></div></div>
   ${candPanelHTML()}
+  ${preInboxHTML()}
   <div class="card" style="margin-bottom:12px"><div class="row" style="gap:10px;align-items:end">
      <div style="flex:1;min-width:200px"><label>Buscar (nome, e-mail, vaga)</label><input value="${esc(FCAND.q)}" oninput="FCAND.q=this.value;renderCands()"></div>
      <div style="min-width:220px"><label>Vaga</label><select onchange="FCAND.vaga=this.value;renderCands()">${vagaOpts}</select></div>
@@ -1327,6 +1374,7 @@ function renderCfg(){
    <label>URL do backend</label><input id="cfg-url" value="${esc(S.config.backendUrl||'')}" placeholder="https://script.google.com/macros/s/.../exec">
    <label style="margin-top:8px">Página do teste DISC (URL do disc_assino.html hospedado)</label><input id="cfg-disc" value="${esc(S.config.discUrl||'')}" placeholder="https://seu-site.vercel.app/disc_assino.html">
    <label style="margin-top:8px">Página de solicitação de vaga (URL do solicitacao_vaga_assino.html)</label><input id="cfg-req" value="${esc(S.config.reqUrl||'')}" placeholder="https://seu-site.vercel.app/solicitacao_vaga_assino.html">
+   <label style="margin-top:8px">Página de pré-triagem (URL do pretriagem_assino.html)</label><input id="cfg-pre" value="${esc(S.config.preUrl||'')}" placeholder="https://seu-site.vercel.app/pretriagem_assino.html">
    <label style="margin-top:8px">Página de candidatura (URL do candidatura_assino.html)</label><input id="cfg-cand" value="${esc(S.config.candUrl||'')}" placeholder="https://seu-site.vercel.app/candidatura_assino.html">
    <div class="flexbtns"><button class="btn navy" onclick="saveBackend()">Salvar URLs</button>
      <button class="btn gold" onclick="Store.pushVerify()">Salvar na nuvem agora (verificado)</button>
@@ -1337,7 +1385,7 @@ function renderCfg(){
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ats_assino_'+new Date().toISOString().slice(0,10)+'.json';a.click();}
 function importData(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{S=JSON.parse(r.result);Store.save();go('dash');badge('importado');}catch(e){alert('Arquivo inválido.');}};r.readAsText(f);}
 function resetData(){if(!confirm('Zerar TODOS os dados deste navegador?'))return;S=seedState();Store.save();go('dash');}
-function saveBackend(){S.config.backendUrl=document.getElementById('cfg-url').value.trim();const du=document.getElementById('cfg-disc');if(du)S.config.discUrl=du.value.trim(); const ru=document.getElementById('cfg-req'); if(ru)S.config.reqUrl=ru.value.trim(); const cu=document.getElementById('cfg-cand'); if(cu)S.config.candUrl=cu.value.trim();Store.save();badge('URLs salvas');}
+function saveBackend(){S.config.backendUrl=document.getElementById('cfg-url').value.trim();const du=document.getElementById('cfg-disc');if(du)S.config.discUrl=du.value.trim(); const ru=document.getElementById('cfg-req'); if(ru)S.config.reqUrl=ru.value.trim(); const cu=document.getElementById('cfg-cand'); if(cu)S.config.candUrl=cu.value.trim(); const pu=document.getElementById('cfg-pre'); if(pu)S.config.preUrl=pu.value.trim();Store.save();badge('URLs salvas');}
 async function pullNow(){badge('puxando...');const ok=await Store.pullBackend();if(ok){badge('nuvem: '+S.jobs.length+' vagas · '+S.candidates.length+' candidatos');}else{badge('nada na nuvem / erro',true);}go('dash');}
 
 
