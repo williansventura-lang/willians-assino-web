@@ -443,7 +443,7 @@ function renderJobs(){
     <td><span class="pill ${j.status}">${j.status}</span></td>
     <td>${candsOf(j.id).length}</td>
     <td style="font-weight:800;color:${ageCls||'#4C5573'}">${age==null?'—':age+'d'}</td>
-    <td style="white-space:nowrap"><button class="btn sm" onclick="editJob('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="go('pipe');setTimeout(()=>selJob('${j.id}'),50)">Pipeline</button> <button class="btn sm ghost" onclick="candLink('${j.id}')">🔗 Candidatura</button> <button class="btn sm ghost" onclick="preLink('${j.id}')">🧭 Pré-triagem</button> <button class="btn sm ghost" onclick="iaLink('${j.id}')">🤖 Entrevista IA</button></td></tr>`;}).join('');
+    <td style="white-space:nowrap"><button class="btn sm" onclick="editJob('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="go('pipe');setTimeout(()=>selJob('${j.id}'),50)">Pipeline</button> <button class="btn sm ghost" onclick="candLink('${j.id}')">🔗 Candidatura</button> <button class="btn sm ghost" onclick="preLink('${j.id}')">🧭 Pré-triagem</button> <button class="btn sm ghost" onclick="iaLink('${j.id}')">🤖 Entrevista IA</button> <button class="btn sm ghost" onclick="jobDescLinkedIn('${j.id}')">📝 Descrição LinkedIn</button></td></tr>`;}).join('');
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FJOB.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
   document.getElementById('v-jobs').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Vagas</div><div class="h-sub">Consolidado, filtros e controle de tempo de vaga aberta.</div></div><button class="btn gold" onclick="editJob()">+ Nova vaga</button></div>
@@ -582,7 +582,9 @@ function iaLink(jobId){ const base=(S.config.iaUrl||'').trim(); if(!base){alert(
   const j=jobId?jobById(jobId):null; if(!j){alert('Selecione uma vaga.');return;}
   const reqs=(j.requisitos||[]).map(r=>({txt:r.txt,must:!!r.must}));
   const rb64=btoa(unescape(encodeURIComponent(JSON.stringify(reqs))));
-  const params='?vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo)+'&r='+encodeURIComponent(rb64)+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'');
+  const _f=famById(j.familyId)||{}; const _comps=(_f.lideranca?(SEED.lead||[]):((_f.comps&&_f.comps.length?_f.comps:( _f.matrix||[])).map(c=>c.c))).slice(0,8);
+  const cmp64=btoa(unescape(encodeURIComponent(JSON.stringify({trilha:_f.familia||_f.titulo,nivel:j.nivel,competencias:_comps}))));
+  const params='?vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo)+'&r='+encodeURIComponent(rb64)+'&cmp='+encodeURIComponent(cmp64)+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'');
   const url=base+params;
   openModal('Link da entrevista por IA — '+j.code,`<p style="font-size:13px;color:var(--ink-soft)">Envie ao candidato. A IA conduz a entrevista com base nesta vaga e seus requisitos; o resultado entra em “Pré-triagens recebidas”.</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns"><a class="btn gold" href="${esc(url)}" target="_blank">Abrir</a><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replace(/'/g,"\\'")}');badge('link copiado')">Copiar link</button></div>`);
 }
@@ -596,6 +598,17 @@ function preLink(jobId){ const base=(S.config.preUrl||'').trim(); if(!base){aler
   const url=base+params;
   openModal('Link de pré-triagem — '+j.code,`<p style="font-size:13px;color:var(--ink-soft)">Envie ao candidato. Ele responde a entrevista inicial + DISC e o resultado, com a pré-análise, entra na aba Candidatos.</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns"><a class="btn gold" href="${esc(url)}" target="_blank">Abrir</a><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replace(/'/g,"\\'")}');badge('link copiado')">Copiar link</button></div>`);
 }
+
+function riscoIAtag(r){ 
+  let nivel=r.risco_ia||r.riscoIA||''; const s=r.sinais||{};
+  // se a IA não classificou, deriva dos sinais capturados
+  if(!nivel && s){ const col=s.colagens||0, rap=s.respostasRapidas||0; if(col>=2||rap>=2)nivel='alto'; else if(col>=1||rap>=1)nivel='medio'; else nivel='baixo'; }
+  if(!nivel)return '';
+  const map={baixo:['#eef6ea','#256129','IA: risco baixo'],medio:['#fbf1de','#8a5a12','IA: risco médio'],alto:['#fbe9ea','#8a2e33','IA: risco alto']};
+  const m=map[nivel]||map.baixo;
+  return '<br><span class="tag" style="background:'+m[0]+';color:'+m[1]+'">'+m[2]+'</span>';
+}
+
 function preInboxHTML(){
   const inbox=S._triagemInbox||[];
   const btns='<button class="btn ghost" onclick="pullPretriagem()">Buscar pré-triagens na nuvem</button>';
@@ -604,7 +617,7 @@ function preInboxHTML(){
     return `<tr><td><b>${esc(r.nome||'—')}</b><br><span class="tag">${esc(r.email||'')}</span></td>
     <td>${esc(r.vagaTitulo||'')} <span class="tag">${esc(r.vagaCode||'')}</span></td>
     <td><b>${r.preScore!=null?r.preScore:'—'}</b></td>
-    <td><span class="pill ${cls}">${esc(r.preDecision||'—')}</span>${(r.preFlags&&r.preFlags.length)?'<br><span class="tag" style="background:#fbe9ea;color:#8a2e33">'+esc(r.preFlags[0])+'</span>':''}</td>
+    <td><span class="pill ${cls}">${esc(r.preDecision||'—')}</span>${(r.preFlags&&r.preFlags.length)?'<br><span class="tag" style="background:#fbe9ea;color:#8a2e33">'+esc(r.preFlags[0])+'</span>':''}${riscoIAtag(r)}</td>
     <td style="white-space:nowrap"><button class="btn sm gold" onclick="addPretriagem(${i})">Ver / adicionar</button> <button class="btn sm ghost" onclick="dismissPretriagem(${i})">Descartar</button></td></tr>`;}).join('');
   return `<div class="card" style="margin-bottom:12px;border:2px solid var(--gold)"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div><b>Pré-triagens recebidas</b> <span class="tag" style="background:#fbe9ea;color:#8a2e33">${inbox.length}</span></div><div>${btns}</div></div>
     <table><tr><th>Candidato</th><th>Vaga</th><th>Score</th><th>Pré-análise</th><th></th></tr>${rows}</table></div>`;
@@ -622,6 +635,7 @@ function addPretriagem(i){ const r=(S._triagemInbox||[])[i]; if(!r)return;
     (r.preFlags&&r.preFlags.length)?('Alertas: '+r.preFlags.join('; ')):'',
     'Experiência: '+(r.anosExp||'-')+' anos · Pretensão: R$ '+(r.pretensao||'-')+' · Início: '+(r.inicio||'-')+' · Aceita formato: '+(r.aceitaFormato||'-'),
     'Requisitos: '+((r.reqRespostas||[]).map(x=>x.req+': '+(x.atende?'sim':'não')+(x.must?' (obrig.)':'')).join(' | ')),
+    'Risco de IA (indício, não prova): '+(r.risco_ia||r.riscoIA||( (r.sinais&&((r.sinais.colagens||0)>=2||(r.sinais.respostasRapidas||0)>=2))?'alto':((r.sinais&&((r.sinais.colagens||0)>=1||(r.sinais.respostasRapidas||0)>=1))?'medio':'baixo')) )+(r.risco_ia_motivo?(' — '+r.risco_ia_motivo):'')+((r.sinais)?(' [colagens: '+(r.sinais.colagens||0)+', respostas muito rápidas: '+(r.sinais.respostasRapidas||0)+']'):''),
     'Motivo: '+(r.motivo||'-'),
     'Entrega de orgulho: '+(r.entrega||'-')
   ].filter(Boolean).join('\n');
@@ -1128,6 +1142,55 @@ function excelParecer(id){ const c=S.candidates.find(x=>x.id===id); const j=jobB
   a.href=URL.createObjectURL(blob); a.download='parecer_'+(c.nome||'candidato').replace(/[^a-z0-9]+/gi,'_')+'.csv'; a.click();
 }
 
+
+
+/* ===== Gerador de descrição de vaga (LinkedIn) a partir da trilha ===== */
+const NIVEL_LABEL={IC0:'Assistente',IC1:'Júnior',IC2:'Pleno',IC3:'Sênior',IC4:'Especialista',M1:'Coordenação',M2:'Gerência',M3:'Gerência Sênior',M4:'Head / Diretoria'};
+const NIVEL_RESUMO={
+  IC0:'em início de carreira, com apoio e supervisão próxima, focado em aprender a operação e executar com qualidade',
+  IC1:'com autonomia crescente nas tarefas do dia a dia e responsabilidade sobre entregas individuais',
+  IC2:'com plena autonomia técnica, dono das próprias entregas e referência operacional no time',
+  IC3:'como referência técnica, que resolve casos complexos e apoia o desenvolvimento dos colegas',
+  IC4:'como especialista, que define padrões, destrava problemas difíceis e influencia toda a área',
+  M1:'liderando um time, garantindo cultura, resultado e desenvolvimento das pessoas',
+  M2:'gerindo a área, com responsabilidade por metas, processos e formação de líderes',
+  M3:'à frente de múltiplos times, conectando estratégia e execução',
+  M4:'liderando a função no nível estratégico, com impacto em toda a empresa'
+};
+function jobDescLinkedIn(id){
+  const j=jobById(id); if(!j)return; const f=famById(j.familyId)||{};
+  const nivel=j.nivel||''; const nlabel=NIVEL_LABEL[nivel]||nivel; const nres=NIVEL_RESUMO[nivel]||'com responsabilidade sobre suas entregas';
+  const comps=(f.comps&&f.comps.length?f.comps:(f.matrix||[])).map(c=>c.c);
+  const lead=f.lideranca; 
+  const resp = lead ? (SEED.lead||[]).slice(0,6) : comps.slice(0,6);
+  const respBullets = resp.length?resp:['Atuar nas rotinas da área com qualidade e ritmo','Colaborar com as áreas conectadas ao fluxo','Buscar melhoria contínua dos processos'];
+  const reqMust=(j.requisitos||[]).filter(r=>r.must).map(r=>r.txt);
+  const reqNice=(j.requisitos||[]).filter(r=>!r.must).map(r=>r.txt);
+  const formato=j.formato||j.local||'Híbrido'; const local=j.regional||'';
+  const cta = (S.config.candUrl? (S.config.candUrl+'?vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo)+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'')) : '[link de candidatura]');
+  const texto =
+`🚀 ${j.titulo} — Assino (Crédito Imobiliário)
+📍 ${formato}${local?' · '+local:''} · ${j.contrato}
+
+Na Assino, a gente transforma o sonho da casa própria em chave na mão — com velocidade e precisão. Buscamos um(a) ${j.titulo} para atuar na trilha de ${f.familia||f.titulo}, ${nres}.
+
+O que você vai fazer:
+${respBullets.map(r=>'• '+r).join('\n')}
+
+O que buscamos:
+${(reqMust.length?reqMust:comps.slice(0,3)).map(r=>'• '+r).join('\n')}${reqNice.length?('\n\nDiferenciais:\n'+reqNice.map(r=>'• '+r).join('\n')):''}
+
+Nossa cultura é a Velocidade da Chave: ritmo, senso de dono, colaboração e transparência. Se você resolve com agilidade sem perder o cuidado, vai se sentir em casa.
+
+Candidate-se: ${cta}
+Código da vaga: ${j.code}
+
+#CréditoImobiliário #Vagas #${(f.familia||'Assino').replace(/[^A-Za-zÀ-ú]/g,'')} #Assino`;
+  openModal('Descrição da vaga (LinkedIn) — '+j.code,
+    `<p style="font-size:12px;color:var(--ink-soft)">Texto gerado a partir da trilha <b>${esc(f.familia||f.titulo)}</b> · nível <b>${esc(nlabel)} (${esc(nivel)})</b>. Edite à vontade antes de publicar.</p>
+     <textarea id="jd-text" rows="20" style="font-size:13px">${esc(texto)}</textarea>
+     <div class="flexbtns"><button class="btn gold" onclick="(function(){const t=document.getElementById('jd-text');t.select();navigator.clipboard&&navigator.clipboard.writeText(t.value);badge('descrição copiada');})()">Copiar</button><button class="btn" onclick="editJob('${id}')">Voltar</button></div>`);
+}
 
 /* ===== Carta-proposta (PDF com cabeçalho Assino) ===== */
 const OFFER_BENEFITS={

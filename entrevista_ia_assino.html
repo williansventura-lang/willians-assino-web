@@ -61,8 +61,11 @@ const BE=params.get('be')||'', VAGA=params.get('vaga')||'', TITULO=params.get('t
 // endpoint da função de IA (mesma origem do site): /api/entrevista
 const API='/api/entrevista';
 let REQS=[]; try{ REQS=JSON.parse(decodeURIComponent(escape(atob(params.get('r')||'')))); }catch(e){ REQS=[]; }
+let CMP={}; try{ CMP=JSON.parse(decodeURIComponent(escape(atob(params.get('cmp')||'')))); }catch(e){ CMP={}; }
 if(TITULO){ document.getElementById('vaga-box').innerHTML='<div class="vaga">Vaga: '+TITULO.replace(/[<>]/g,'')+(VAGA?' ('+VAGA.replace(/[<>]/g,'')+')':'')+'</div>'; }
 let hist=[]; // histórico da conversa {role, content}
+let SINAIS={colagens:0, respostasRapidas:0, tempos:[]}; let _tPergunta=0;
+document.addEventListener('paste',e=>{ if(document.activeElement&&document.activeElement.id==='resposta'){ SINAIS.colagens++; } });
 let dados={};
 function v(id){const e=document.getElementById(id);return e?e.value.trim():'';}
 function showErr(id,m){const e=document.getElementById(id);e.textContent=m;e.classList.remove('hide');}
@@ -71,11 +74,11 @@ function typing(on){ let t=document.getElementById('tp'); if(on){ if(!t){t=docum
 async function callIA(){
   typing(true); document.getElementById('sendBtn').disabled=true;
   try{
-    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vaga:TITULO||VAGA,requisitos:REQS,historico:hist})});
+    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vaga:TITULO||VAGA,requisitos:REQS,trilha:CMP.trilha||'',nivel:CMP.nivel||'',competencias:CMP.competencias||[],historico:hist})});
     const j=await r.json(); typing(false); document.getElementById('sendBtn').disabled=false;
     if(j.error){ showErr('errc','Tivemos um problema técnico. Tente novamente em instantes.'); return; }
     if(j.fim){ finalizar(j.analise); return; }
-    addMsg(j.pergunta,'ia'); hist.push({role:'assistant',content:j.pergunta});
+    addMsg(j.pergunta,'ia'); hist.push({role:'assistant',content:j.pergunta}); _tPergunta=Date.now();
   }catch(e){ typing(false); document.getElementById('sendBtn').disabled=false; showErr('errc','Falha de conexão. Verifique sua internet e tente novamente.'); }
 }
 function start(){
@@ -88,6 +91,7 @@ function start(){
 }
 function responder(){
   const txt=v('resposta'); if(!txt) return;
+  if(_tPergunta){ const seg=(Date.now()-_tPergunta)/1000; SINAIS.tempos.push(Math.round(seg)); const cps=txt.length/Math.max(1,seg); if(txt.length>220 && seg<12) SINAIS.respostasRapidas++; }
   addMsg(txt,'eu'); hist.push({role:'user',content:txt}); document.getElementById('resposta').value='';
   callIA();
 }
@@ -99,7 +103,7 @@ function finalizar(analise){
     preDecision:(analise&&analise.sugestao)||'',
     preFlags:(analise&&analise.pontos_atencao)||[],
     resumoIA:(analise&&analise.resumo)||'', pontosFortes:(analise&&analise.pontos_fortes)||[],
-    transcricao:hist, via:'IA', at:new Date().toISOString() };
+    transcricao:hist, sinais:SINAIS, via:'IA', at:new Date().toISOString() };
   if(BE){ fetch(BE,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'pretriagem',data:payload})}).catch(()=>{}); }
 }
 // enviar com Enter (shift+enter = nova linha)
