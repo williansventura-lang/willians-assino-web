@@ -865,17 +865,34 @@ async function pullPretriagem(){ const u=S.config.backendUrl; if(!u){alert('Conf
 }
 function addPretriagem(i){ const r=(S._triagemInbox||[])[i]; if(!r)return;
   let jobId=''; if(r.vagaCode){ const j=S.jobs.find(x=>x.code===r.vagaCode); if(j)jobId=j.id; }
-  const resumo=[
-    'PRÉ-TRIAGEM ('+(r.preDecision||'')+' · score '+(r.preScore!=null?r.preScore:'-')+')',
-    (r.preFlags&&r.preFlags.length)?('Alertas: '+r.preFlags.join('; ')):'',
-    'Experiência: '+(r.anosExp||'-')+' anos · Pretensão: R$ '+(r.pretensao||'-')+' · Início: '+(r.inicio||'-')+' · Aceita formato: '+(r.aceitaFormato||'-'),
-    'Requisitos: '+((r.reqRespostas||[]).map(x=>x.req+': '+(x.atende?'sim':'não')+(x.must?' (obrig.)':'')).join(' | ')),
-    'Persona mais próxima: '+(r.persona_proxima||'—')+(r.persona_fit?(' ('+r.persona_fit+'% fit)'):'')+(r.valores_destaque&&r.valores_destaque.length?(' · Valores em destaque: '+r.valores_destaque.join(', ')):''),
-    'Fit cultural: '+(r.fit_cultural!=null?r.fit_cultural:'—')+' · Fit remoto: '+(r.fit_remoto!=null?r.fit_remoto:'—')+' · Técnico: '+(r.tecnico!=null?r.tecnico:'—'),
-    'Risco de IA (indício, não prova): '+(r.risco_ia||r.riscoIA||( (r.sinais&&((r.sinais.colagens||0)>=2||(r.sinais.respostasRapidas||0)>=2))?'alto':((r.sinais&&((r.sinais.colagens||0)>=1||(r.sinais.respostasRapidas||0)>=1))?'medio':'baixo')) )+(r.risco_ia_motivo?(' — '+r.risco_ia_motivo):'')+((r.sinais)?(' [colagens: '+(r.sinais.colagens||0)+', respostas muito rápidas: '+(r.sinais.respostasRapidas||0)+']'):''),
-    'Motivo: '+(r.motivo||'-'),
-    'Entrega de orgulho: '+(r.entrega||'-')
-  ].filter(Boolean).join('\n');
+  const isIA = r.via==='IA' || r.resumoIA || r.persona_proxima || r.fit_cultural!=null;
+  const riscoTxt = (r.risco_ia||( (r.sinais&&((r.sinais.colagens||0)>=2||(r.sinais.respostasRapidas||0)>=2))?'alto':((r.sinais&&((r.sinais.colagens||0)>=1||(r.sinais.respostasRapidas||0)>=1))?'medio':'baixo') ));
+  let linhas=[];
+  if(isIA){
+    linhas=[
+      'ENTREVISTA IA — '+(r.preDecision||'—')+(r.preScore!=null?(' · aderência '+r.preScore):''),
+      r.resumoIA?('Resumo: '+r.resumoIA):'',
+      'Persona mais próxima: '+(r.persona_proxima||'—')+(r.persona_fit!=null?(' ('+r.persona_fit+'% fit)'):''),
+      'Fits — cultural: '+(r.fit_cultural!=null?r.fit_cultural:'—')+' · remoto: '+(r.fit_remoto!=null?r.fit_remoto:'—')+' · técnico: '+(r.tecnico!=null?r.tecnico:'—'),
+      (r.valores_destaque&&r.valores_destaque.length)?('Valores em destaque: '+r.valores_destaque.join(', ')):'',
+      (r.pontosFortes&&r.pontosFortes.length)?('Pontos fortes: '+r.pontosFortes.join('; ')):'',
+      (r.preFlags&&r.preFlags.length)?('Pontos de atenção: '+r.preFlags.join('; ')):'',
+      r.pre_triagem?('Pré-triagem — disponibilidade: '+(r.pre_triagem.disponibilidade||'—')+' · pretensão: '+(r.pre_triagem.pretensao||'—')+' · formato: '+(r.pre_triagem.formato||'—')+' · requisitos: '+(r.pre_triagem.requisitos_atendidos||'—')):'',
+      'Risco de IA (indício, não prova): '+riscoTxt+(r.risco_ia_motivo?(' — '+r.risco_ia_motivo):'')+((r.sinais)?(' [colagens: '+(r.sinais.colagens||0)+', respostas rápidas: '+(r.sinais.respostasRapidas||0)+']'):''),
+      (r.transcricao&&r.transcricao.length)?('— Transcrição —\n'+r.transcricao.map(m=>(m.role==='assistant'?'IA: ':'Candidato: ')+m.content).join('\n')):''
+    ];
+  } else {
+    linhas=[
+      'PRÉ-TRIAGEM (formulário) — '+(r.preDecision||'')+(r.preScore!=null?(' · score '+r.preScore):''),
+      (r.preFlags&&r.preFlags.length)?('Alertas: '+r.preFlags.join('; ')):'',
+      'Experiência: '+(r.anosExp||'-')+' anos · Pretensão: R$ '+(r.pretensao||'-')+' · Início: '+(r.inicio||'-')+' · Aceita formato: '+(r.aceitaFormato||'-'),
+      'Requisitos: '+((r.reqRespostas||[]).map(x=>x.req+': '+(x.atende?'sim':'não')+(x.must?' (obrig.)':'')).join(' | ')),
+      'Risco de IA (indício): '+riscoTxt,
+      'Motivo: '+(r.motivo||'-'),
+      'Entrega de orgulho: '+(r.entrega||'-')
+    ];
+  }
+  const resumo=linhas.filter(Boolean).join('\n');
   const c={id:uid(),jobId:jobId,nome:r.nome||'(sem nome)',email:r.email||'',phone:r.telefone||'',linkedin:r.linkedin||'',
     source:'Pré-triagem (link)',stage:'Triagem',createdAt:new Date().toISOString(),statusAtual:'Em processo',motivoSaida:'',
     cvText:'',notes:resumo,disc:{D:0,I:0,S:0,C:0,done:false},persona:{},principios:[],scRecruiter:{},scManager:{},aderencia:{},techTests:[],recommendation:{}};

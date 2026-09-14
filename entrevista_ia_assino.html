@@ -98,13 +98,19 @@ function responder(){
 }
 function finalizar(analise){
   document.getElementById('conversa').classList.add('hide'); document.getElementById('fim').classList.remove('hide');
+  const A=analise||{};
   const payload={ type:'pretriagem', cid:CID, nome:dados.nome, email:dados.email, telefone:dados.telefone,
-    vagaCode:VAGA, vagaTitulo:TITULO,
-    preScore:(analise&&analise.aderencia!=null)?analise.aderencia:null,
-    preDecision:(analise&&analise.sugestao)||'',
-    preFlags:(analise&&analise.pontos_atencao)||[],
-    resumoIA:(analise&&analise.resumo)||'', pontosFortes:(analise&&analise.pontos_fortes)||[],
-    transcricao:hist, sinais:SINAIS, via:'IA', at:new Date().toISOString() };
+    vagaCode:VAGA, vagaTitulo:TITULO, via:'IA',
+    preScore:(A.aderencia!=null)?A.aderencia:null,
+    preDecision:A.sugestao||'',
+    preFlags:A.pontos_atencao||[],
+    resumoIA:A.resumo||'', pontosFortes:A.pontos_fortes||[],
+    persona_proxima:A.persona_proxima||'', persona_fit:A.persona_fit!=null?A.persona_fit:null,
+    valores_destaque:A.valores_destaque||[],
+    fit_cultural:A.fit_cultural!=null?A.fit_cultural:null, fit_remoto:A.fit_remoto!=null?A.fit_remoto:null, tecnico:A.tecnico!=null?A.tecnico:null,
+    pre_triagem:A.pre_triagem||null,
+    risco_ia:A.risco_ia||'', risco_ia_motivo:A.risco_ia_motivo||'',
+    transcricao:hist, sinais:SINAIS, at:new Date().toISOString() };
   if(BE){ fetch(BE,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'pretriagem',data:payload})}).catch(()=>{}); }
 }
 // enviar com Enter (shift+enter = nova linha)
