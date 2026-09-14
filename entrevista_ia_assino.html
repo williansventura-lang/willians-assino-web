@@ -62,6 +62,7 @@ const BE=params.get('be')||'', VAGA=params.get('vaga')||'', TITULO=params.get('t
 const API='/api/entrevista';
 let REQS=[]; try{ REQS=JSON.parse(decodeURIComponent(escape(atob(params.get('r')||'')))); }catch(e){ REQS=[]; }
 let CMP={}; try{ CMP=JSON.parse(decodeURIComponent(escape(atob(params.get('cmp')||'')))); }catch(e){ CMP={}; }
+let JDT=[]; try{ JDT=JSON.parse(decodeURIComponent(escape(atob(params.get('jdt')||'')))); }catch(e){ JDT=[]; }
 if(TITULO){ document.getElementById('vaga-box').innerHTML='<div class="vaga">Vaga: '+TITULO.replace(/[<>]/g,'')+(VAGA?' ('+VAGA.replace(/[<>]/g,'')+')':'')+'</div>'; }
 let hist=[]; // histórico da conversa {role, content}
 let SINAIS={colagens:0, respostasRapidas:0, tempos:[]}; let _tPergunta=0;
@@ -74,7 +75,7 @@ function typing(on){ let t=document.getElementById('tp'); if(on){ if(!t){t=docum
 async function callIA(){
   typing(true); document.getElementById('sendBtn').disabled=true;
   try{
-    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vaga:TITULO||VAGA,requisitos:REQS,trilha:CMP.trilha||'',nivel:CMP.nivel||'',competencias:CMP.competencias||[],historico:hist})});
+    const r=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vaga:TITULO||VAGA,requisitos:REQS,trilha:CMP.trilha||'',nivel:CMP.nivel||'',competencias:CMP.competencias||[],jdTecnicas:JDT,historico:hist})});
     const j=await r.json(); typing(false); document.getElementById('sendBtn').disabled=false;
     if(j.error){ showErr('errc','Tivemos um problema técnico. Tente novamente em instantes.'); return; }
     if(j.fim){ finalizar(j.analise); return; }

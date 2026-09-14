@@ -115,6 +115,7 @@ tr:hover td{background:#fafbfe}
 <div class="tabs">
 <button data-t="dash" class="active" onclick="go('dash')">Dashboard</button>
 <button data-t="jobs" onclick="go('jobs')">Vagas</button>
+<button data-t="jd" onclick="go('jd')">Job Descriptions</button>
 <button data-t="pipe" onclick="go('pipe')">Pipeline</button>
 <button data-t="cands" onclick="go('cands')">Candidatos</button>
 <button data-t="msg" onclick="go('msg')">Mensagens</button>
@@ -127,6 +128,7 @@ tr:hover td{background:#fafbfe}
 <div class="wrap">
 <div id="v-dash" class="view active"></div>
 <div id="v-jobs" class="view"></div>
+<div id="v-jd" class="view"></div>
 <div id="v-pipe" class="view"></div>
 <div id="v-cands" class="view"></div>
 <div id="v-msg" class="view"></div>
@@ -235,6 +237,16 @@ function candsOf(jobId){ return S.candidates.filter(c=>c.jobId===jobId); }
 function nextCode(familyId){ const a=AREA[familyId]||"GEN"; S.seq[a]=(S.seq[a]||0)+1; return "ASS-"+a+"-"+String(S.seq[a]).padStart(4,'0'); }
 
 /* ---------- Competencies for a family (for scorecards) ---------- */
+
+function jdTechComps(job){ window._jdQ=window._jdQ||{}; if(!job||!job.jdId)return []; const J=jdById(job.jdId); if(!J)return [];
+  const out=[]; const add=(txt,tipo)=>{ if(!txt)return; const label='[JD] '+txt; out.push(label);
+    window._jdQ[label]=[ 'Fale sobre sua experiência prática com: '+txt+'. Peça um exemplo concreto (situação, o que fez, resultado).',
+      'Como você comprovaria, na prática, domínio em "'+txt+'"?' ]; };
+  (J.requisitos||[]).forEach(r=>add(r.txt,'req'));
+  (J.competencias||[]).forEach(r=>add(r.txt,'comp'));
+  return out;
+}
+
 function compsForFamily(f){
   let list=[];
   if(f.lideranca){ list=SEED.lead.slice(); }
@@ -270,7 +282,7 @@ function escSvg(s,n){n=n||40;s=(s==null?'':String(s));if(s.length>n)s=s.slice(0,
 function go(t){ document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.t===t));
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('v-'+t).classList.add('active');
-  ({dash:renderDash,jobs:renderJobs,pipe:renderPipe,cands:renderCands,msg:renderMsg,onb:renderOnb,custo:renderCusto,cfg:renderCfg})[t]();
+  ({dash:renderDash,jobs:renderJobs,jd:renderJD,pipe:renderPipe,cands:renderCands,msg:renderMsg,onb:renderOnb,custo:renderCusto,cfg:renderCfg})[t]();
 }
 function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function openModal(title,html){document.getElementById('modal-title').textContent=title;document.getElementById('modal-body').innerHTML=html;document.getElementById('modalbg').classList.add('open');}
@@ -380,6 +392,160 @@ function dashCostCharts(){
   </div>`;
 }
 
+
+/* ================= JOB DESCRIPTIONS ================= */
+function jdSeed(){ return {id:uid(), titulo:'', familyId:'', nivel:'', modelo:'Remoto', local:'', contrato:'CLT', remFixa:'', remVar:'', beneficios:'', missao:'',
+  responsabilidades:'', reqObrig:'', reqDesej:'', compChave:'', dos:'', donts:'', yellow:'',
+  intake1:{perfil:'', expEntregas:'', senioridade:'', experiencias:''},
+  intake2:{sourcing:'', etapas:'', prazo:'', avaliadores:''}, criadoEm:new Date().toISOString() }; }
+function renderJD(){
+  S.jds=S.jds||[];
+  const rows=S.jds.map(j=>`<tr><td><b>${esc(j.titulo||'(sem título)')}</b><br><span class="tag">${esc((famById(j.familyId)||{}).familia||'')} ${esc(j.nivel||'')}</span></td>
+    <td><span class="pill ${(j.contrato||'CLT').toLowerCase()}">${esc(j.contrato||'')}</span> ${esc(j.modelo||'')}</td>
+    <td>${esc((j.missao||'').slice(0,80))}${(j.missao||'').length>80?'…':''}</td>
+    <td style="white-space:nowrap"><button class="btn sm" onclick="editJD('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="dupJD('${j.id}')">Copiar</button> <button class="btn sm ghost" onclick="go('jobs');setTimeout(()=>editJob(null,'${j.id}'),40)">Abrir vaga</button></td></tr>`).join('');
+  document.getElementById('v-jd').innerHTML=`
+  <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Job Descriptions</div><div class="h-sub">Banco de JDs — base para abrir vagas, gerar scorecard e divulgação. Modelo: Descrição + Intake 1 (candidatos) + Intake 2 (processo).</div></div><button class="btn gold" onclick="editJD()">+ Novo JD</button></div>
+  ${S.jds.length?`<div class="card"><table><tr><th>Posição</th><th>Contrato/Modelo</th><th>Missão</th><th></th></tr>${rows}</table></div>`:'<div class="empty">Nenhum Job Description ainda. Crie o primeiro — ele será a base das vagas.</div>'}`;
+}
+function dupJD(id){ const o=S.jds.find(x=>x.id===id); if(!o)return; const c=JSON.parse(JSON.stringify(o)); c.id=uid(); c.titulo=(o.titulo||'')+' (cópia)'; c.criadoEm=new Date().toISOString(); S.jds.push(c); Store.save(); editJD(c.id); }
+function editJD(id){
+  S.jds=S.jds||[]; const j=id?S.jds.find(x=>x.id===id):jdSeed(); const isNew=!id;
+  const famOpts=SEED.families.map(f=>`<option value="${f.id}" ${j.familyId===f.id?'selected':''}>${esc(f.titulo)}</option>`).join('');
+  const fam=famById(j.familyId)||SEED.families[0];
+  const nivOpts=(fam.niveis||[]).map(n=>`<option ${j.nivel===n?'selected':''}>${n}</option>`).join('');
+  const TA=(id2,val,ph,rows)=>`<textarea id="${id2}" rows="${rows||3}" placeholder="${esc(ph||'')}">${esc(val||'')}</textarea>`;
+  openModal(isNew?'Novo Job Description':'Editar Job Description',`
+   <h4 style="color:var(--blue-600);margin:2px 0 8px">1. Job Description</h4>
+   <div class="grid g2">
+     <div><label>Nome da posição</label><input id="jd-tit" value="${esc(j.titulo)}"></div>
+     <div><label>Trilha / cargo</label><select id="jd-fam" onchange="jdNiv()">${famOpts}</select></div>
+     <div><label>Nível</label><select id="jd-niv">${nivOpts}</select></div>
+     <div><label>Modelo</label><select id="jd-modelo"><option ${j.modelo==='Remoto'?'selected':''}>Remoto</option><option ${j.modelo==='Presencial'?'selected':''}>Presencial</option><option ${j.modelo==='Híbrido'?'selected':''}>Híbrido</option></select></div>
+     <div><label>Local de trabalho</label><input id="jd-local" value="${esc(j.local)}" placeholder="Ex.: São Paulo Capital"></div>
+     <div><label>Tipo de contrato</label><select id="jd-con"><option ${j.contrato==='CLT'?'selected':''}>CLT</option><option ${j.contrato==='PJ'?'selected':''}>PJ</option></select></div>
+     <div><label>Remuneração fixa</label><input id="jd-remf" value="${esc(j.remFixa)}" placeholder="R$ ..."></div>
+     <div><label>Remuneração variável</label><input id="jd-remv" value="${esc(j.remVar)}" placeholder="Plano de variável"></div>
+   </div>
+   <label>Benefícios</label>${TA('jd-benef',j.beneficios,'Um por linha',2)}
+   <label>Missão da posição (o que faz, porquê e impacto)</label>${TA('jd-missao',j.missao,'',3)}
+   <label>Principais responsabilidades (uma por linha)</label>${TA('jd-resp',j.responsabilidades,'- Responsabilidade 1\n- Responsabilidade 2',5)}
+   <div class="grid g2">
+     <div><label>Requisitos obrigatórios (um por linha)</label>${TA('jd-reqo',j.reqObrig,'',4)}</div>
+     <div><label>Requisitos desejáveis (um por linha)</label>${TA('jd-reqd',j.reqDesej,'',4)}</div>
+   </div>
+   <label>Competências-chave (uma por linha — viram perguntas técnicas no scorecard)</label>${TA('jd-comp',j.compChave,'- Competência técnica 1\n- Competência técnica 2',4)}
+   <div class="grid g2">
+     <div><label>Do's (o que potencializa)</label>${TA('jd-dos',j.dos,'',3)}</div>
+     <div><label>Don'ts / Yellow flags</label>${TA('jd-donts',(j.donts||'')+(j.yellow?('\n'+j.yellow):''),'',3)}</div>
+   </div>
+   <h4 style="color:var(--blue-600);margin:14px 0 8px">2. Intake 1 — sobre os candidatos</h4>
+   <label>Perfil ideal do candidato</label>${TA('jd-i1perfil',j.intake1.perfil,'',3)}
+   <div class="grid g2">
+     <div><label>Expectativa de entregas</label>${TA('jd-i1entregas',j.intake1.expEntregas,'',3)}</div>
+     <div><label>Senioridade / experiências</label>${TA('jd-i1exp',(j.intake1.senioridade||'')+(j.intake1.experiencias?('\n'+j.intake1.experiencias):''),'',3)}</div>
+   </div>
+   <h4 style="color:var(--blue-600);margin:14px 0 8px">3. Intake 2 — sobre o processo</h4>
+   <div class="grid g2">
+     <div><label>Sourcing (onde buscar)</label>${TA('jd-i2src',j.intake2.sourcing,'',2)}</div>
+     <div><label>Etapas do processo</label>${TA('jd-i2etapas',j.intake2.etapas,'',2)}</div>
+     <div><label>Prazo desejado</label><input id="jd-i2prazo" value="${esc(j.intake2.prazo||'')}"></div>
+     <div><label>Avaliadores / entrevistadores</label><input id="jd-i2aval" value="${esc(j.intake2.avaliadores||'')}"></div>
+   </div>
+   <div class="flexbtns" style="margin-top:12px"><button class="btn navy" onclick="saveJD('${isNew?'':j.id}')">Salvar JD</button>${isNew?'':`<button class="btn danger" onclick="delJD('${j.id}')">Excluir</button>`}</div>`);
+}
+function jdNiv(){const f=famById(document.getElementById('jd-fam').value);document.getElementById('jd-niv').innerHTML=(f.niveis||[]).map(n=>`<option>${n}</option>`).join('');}
+function saveJD(id){
+  const g=x=>{const e=document.getElementById(x);return e?e.value:'';};
+  const data={titulo:g('jd-tit'),familyId:g('jd-fam'),nivel:g('jd-niv'),modelo:g('jd-modelo'),local:g('jd-local'),contrato:g('jd-con'),
+    remFixa:g('jd-remf'),remVar:g('jd-remv'),beneficios:g('jd-benef'),missao:g('jd-missao'),responsabilidades:g('jd-resp'),
+    reqObrig:g('jd-reqo'),reqDesej:g('jd-reqd'),compChave:g('jd-comp'),dos:g('jd-dos'),donts:g('jd-donts'),yellow:'',
+    intake1:{perfil:g('jd-i1perfil'),expEntregas:g('jd-i1entregas'),senioridade:g('jd-i1exp'),experiencias:''},
+    intake2:{sourcing:g('jd-i2src'),etapas:g('jd-i2etapas'),prazo:g('jd-i2prazo'),avaliadores:g('jd-i2aval')}};
+  S.jds=S.jds||[];
+  if(id){Object.assign(S.jds.find(x=>x.id===id),data);} else {data.id=uid();data.criadoEm=new Date().toISOString();S.jds.push(data);}
+  Store.save();closeModal();renderJD();
+}
+function delJD(id){ openModal('Excluir JD',`<p>Excluir este Job Description?</p><div class="flexbtns"><button class="btn danger" onclick="(function(){S.jds=S.jds.filter(x=>x.id!=='${id}');Store.save();closeModal();renderJD();})()">Sim, excluir</button><button class="btn" onclick="editJD('${id}')">Cancelar</button></div>`); }
+function jdById(id){return (S.jds||[]).find(x=>x.id===id);}
+
+
+/* ================= JOB DESCRIPTIONS ================= */
+function ensureJDs(){ if(!S.jds)S.jds=[]; }
+function jdById(id){ ensureJDs(); return S.jds.find(j=>j.id===id); }
+function novoJD(base){ ensureJDs();
+  const j = base ? JSON.parse(JSON.stringify(base)) : {
+    nome:'',modelo:'Remoto',local:'',contrato:'CLT',remFixa:'',remVar:'',beneficios:'',
+    missao:'',responsabilidades:[],requisitos:[],competencias:[],
+    expectativaEntregas:'',dos:'',donts:'',potencializador:'',yellowFlags:'',
+    sourcing:'',etapas:'' };
+  j.id=uid(); j.nome=(base? (base.nome+' (cópia)'):j.nome); j.criadoEm=new Date().toISOString();
+  editJD(j,true);
+}
+function renderJD(){
+  ensureJDs();
+  const rows=S.jds.map(j=>`<tr>
+    <td><b>${esc(j.nome||'(sem nome)')}</b><br><span class="tag">${esc(j.contrato||'')} · ${esc(j.modelo||'')}</span></td>
+    <td>${esc((j.missao||'').slice(0,90))}${(j.missao||'').length>90?'…':''}</td>
+    <td>${(j.requisitos||[]).length} req · ${(j.competencias||[]).length} comp</td>
+    <td style="white-space:nowrap"><button class="btn sm" onclick="editJDid('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="copiarJD('${j.id}')">Copiar</button> <button class="btn sm ghost" onclick="abrirVagaDoJD('${j.id}')">Abrir vaga</button></td></tr>`).join('');
+  document.getElementById('v-jd').innerHTML=`
+  <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Job Descriptions</div><div class="h-sub">Banco de descrições de vaga. Base para abrir vagas, gerar o scorecard técnico e o anúncio de divulgação.</div></div><button class="btn gold" onclick="novoJD()">+ Novo Job Description</button></div>
+  ${S.jds.length?`<div class="card"><table><tr><th>Posição</th><th>Missão</th><th>Conteúdo</th><th></th></tr>${rows}</table></div>`:'<div class="empty">Nenhum Job Description ainda. Crie o primeiro — ele será a base para abrir vagas.</div>'}`;
+}
+function editJDid(id){ const j=jdById(id); if(j)editJD(j,false); }
+function copiarJD(id){ const j=jdById(id); if(j)novoJD(j); }
+function editJD(j,isNew){
+  const listBlock=(arr,fn,ph)=>`<div id="${fn}-wrap">${(arr||[]).map((x,i)=>jdRow(fn,x,i)).join('')}</div><button class="btn sm" onclick="jdAdd('${fn}')">+ item</button>`;
+  openModal((isNew?'Novo':'Editar')+' Job Description',`
+   <div class="grid g2">
+     <div><label>Nome da posição *</label><input id="jd-nome" value="${esc(j.nome||'')}"></div>
+     <div><label>Modelo (presencial/remoto/híbrido)</label><input id="jd-modelo" value="${esc(j.modelo||'')}"></div>
+     <div><label>Local de trabalho</label><input id="jd-local" value="${esc(j.local||'')}"></div>
+     <div><label>Tipo de contrato</label><select id="jd-contrato"><option ${j.contrato==='CLT'?'selected':''}>CLT</option><option ${j.contrato==='PJ'?'selected':''}>PJ</option></select></div>
+     <div><label>Remuneração fixa (faixa)</label><input id="jd-remfixa" value="${esc(j.remFixa||'')}"></div>
+     <div><label>Remuneração variável</label><input id="jd-remvar" value="${esc(j.remVar||'')}"></div>
+   </div>
+   <label>Benefícios</label><textarea id="jd-beneficios" rows="2">${esc(j.beneficios||'')}</textarea>
+   <div class="sec"><h4>Descrição da posição</h4>
+     <label>Missão da posição</label><textarea id="jd-missao" rows="3">${esc(j.missao||'')}</textarea>
+     <label>Principais responsabilidades</label>${listBlock(j.responsabilidades,'resp')}
+   </div>
+   <div class="sec"><h4>Requisitos & competências (viram perguntas técnicas no scorecard)</h4>
+     <label>Requisitos (experiência, formação, certificação)</label>${listBlockReq(j.requisitos,'req')}
+     <label style="margin-top:8px">Competências-chave</label>${listBlockReq(j.competencias,'comp')}
+   </div>
+   <div class="sec"><h4>Intake 1 — sobre os candidatos</h4>
+     <label>Expectativa de entregas</label><textarea id="jd-entregas" rows="2">${esc(j.expectativaEntregas||'')}</textarea>
+     <div class="grid g2"><div><label>Do's (potencializadores)</label><textarea id="jd-dos" rows="2">${esc(j.dos||'')}</textarea></div>
+     <div><label>Don'ts / Yellow flags</label><textarea id="jd-donts" rows="2">${esc(j.donts||j.yellowFlags||'')}</textarea></div></div>
+   </div>
+   <div class="sec"><h4>Intake 2 — sobre o processo</h4>
+     <div class="grid g2"><div><label>Sourcing (onde buscar)</label><textarea id="jd-sourcing" rows="2">${esc(j.sourcing||'')}</textarea></div>
+     <div><label>Etapas do processo</label><textarea id="jd-etapas" rows="2">${esc(j.etapas||'')}</textarea></div></div>
+   </div>
+   <div class="flexbtns"><button class="btn navy" onclick="salvarJD('${j.id}',${isNew})">Salvar JD</button>${!isNew?`<button class="btn danger" onclick="excluirJD('${j.id}')">Excluir</button>`:''}</div>`);
+}
+function jdRow(fn,val,i){return `<div class="row" data-row="${fn}" style="margin-bottom:5px"><input value="${esc(val||'')}" style="flex:1"><button class="btn sm ghost" onclick="this.closest('[data-row]').remove()">×</button></div>`;}
+function jdRowReq(fn,val,i){const t=typeof val==='object'?val:{txt:val,must:true};return `<div class="row" data-row="${fn}" style="margin-bottom:5px;align-items:center"><input value="${esc(t.txt||'')}" style="flex:1"><label style="margin:0 6px"><input type="checkbox" style="width:auto" ${t.must?'checked':''}> obrig.</label><button class="btn sm ghost" onclick="this.closest('[data-row]').remove()">×</button></div>`;}
+function listBlockReq(arr,fn){return `<div id="${fn}-wrap">${(arr||[]).map((x,i)=>jdRowReq(fn,x,i)).join('')}</div><button class="btn sm" onclick="jdAddReq('${fn}')">+ item</button>`;}
+function jdAdd(fn){document.getElementById(fn+'-wrap').insertAdjacentHTML('beforeend',jdRow(fn,'',0));}
+function jdAddReq(fn){document.getElementById(fn+'-wrap').insertAdjacentHTML('beforeend',jdRowReq(fn,{txt:'',must:true},0));}
+function collectRows(fn){return [...document.querySelectorAll('#'+fn+'-wrap [data-row]')].map(d=>d.querySelector('input').value.trim()).filter(Boolean);}
+function collectRowsReq(fn){return [...document.querySelectorAll('#'+fn+'-wrap [data-row]')].map(d=>({txt:d.querySelector('input[type=text],input:not([type])').value.trim()||d.querySelector('input').value.trim(),must:d.querySelector('input[type=checkbox]').checked})).filter(r=>r.txt);}
+function salvarJD(id,isNew){
+  ensureJDs();
+  const data={id:id,nome:val('jd-nome')||'(sem nome)',modelo:val('jd-modelo'),local:val('jd-local'),contrato:val('jd-contrato'),
+    remFixa:val('jd-remfixa'),remVar:val('jd-remvar'),beneficios:val('jd-beneficios'),missao:val('jd-missao'),
+    responsabilidades:collectRows('resp'),requisitos:collectRowsReq('req'),competencias:collectRowsReq('comp'),
+    expectativaEntregas:val('jd-entregas'),dos:val('jd-dos'),donts:val('jd-donts'),
+    sourcing:val('jd-sourcing'),etapas:val('jd-etapas'),criadoEm:new Date().toISOString()};
+  if(isNew){ S.jds.push(data); } else { const idx=S.jds.findIndex(x=>x.id===id); if(idx>=0)S.jds[idx]=data; else S.jds.push(data); }
+  Store.save(); closeModal(); renderJD();
+}
+function val(id){const e=document.getElementById(id);return e?e.value.trim():'';}
+function excluirJD(id){ openModal('Excluir JD',`<p>Excluir este Job Description?</p><div class="flexbtns"><button class="btn danger" onclick="(function(){S.jds=S.jds.filter(x=>x.id!=='${id}');Store.save();closeModal();renderJD();})()">Sim, excluir</button><button class="btn" onclick="editJDid('${id}')">Cancelar</button></div>`); }
+
 /* ================= VAGAS ================= */
 function jobsFiltered(){
   let arr=S.jobs.slice();
@@ -463,12 +629,40 @@ function renderJobs(){
   </div></div>
   ${arr.length?`<div class="card"><table><tr><th>Código</th><th>Vaga</th><th>Gestor / Recrutador</th><th>Tipo</th><th>Status</th><th>Cand.</th><th>Tempo</th><th></th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma vaga no filtro.</div>'}`;
 }
+
+let _jdSel='';
+
+function jdSelectorHTML(){ ensureJDs();
+  const opts=['<option value="">— selecione um JD do banco —</option>'].concat(
+    (S.jds||[]).map(function(J){return '<option value="'+J.id+'">'+esc(J.nome)+' ('+esc(J.contrato||'')+')</option>';})
+  ).join('');
+  return '<div class="card" style="background:#f7f9fd;margin-bottom:10px"><label>Partir de um Job Description</label>'+
+    '<div class="row" style="gap:8px"><select id="j-jd" style="flex:1">'+opts+'</select>'+
+    '<button class="btn" type="button" onclick="aplicarJDnaVaga()">Aplicar</button></div>'+
+    '<div style="font-size:11px;color:var(--ink-faint);margin-top:4px">Selecionar um JD preenche título, contrato, formato, salário e requisitos. Você pode editar depois.</div></div>';
+}
+
+function aplicarJDnaVaga(){ const sel=document.getElementById('j-jd'); if(!sel||!sel.value){alert('Selecione um JD.');return;} const J=jdById(sel.value); if(!J)return; window._jdSel=J.id;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e&&v!=null)e.value=v;};
+  set('j-tit',J.nome); set('j-loc',J.modelo||J.local); set('j-sal',J.remFixa);
+  const con=document.getElementById('j-con'); if(con&&J.contrato)con.value=J.contrato;
+  const fmt=document.getElementById('j-fmt'); if(fmt&&J.modelo){const opt=[...fmt.options].find(o=>J.modelo.toLowerCase().includes(o.value.toLowerCase()));if(opt)fmt.value=opt.value;}
+  // requisitos: JD.requisitos + competências-chave
+  const wrap=document.getElementById('j-reqs'); if(wrap){ wrap.innerHTML='';
+    (J.requisitos||[]).concat(J.competencias||[]).forEach(r=>wrap.insertAdjacentHTML('beforeend',reqRow({txt:r.txt,must:r.must},0)));
+  }
+  badge('JD aplicado — revise e salve');
+}
+function abrirVagaDoJD(id){ window._jdSel=id; go('jobs'); setTimeout(()=>{ editJob(); setTimeout(()=>{ const sel=document.getElementById('j-jd'); if(sel){sel.value=id; aplicarJDnaVaga();} },60); },60); }
+
 function editJob(id){
+  window._jdSel=(id?((jobById(id)||{}).jdId||''):'' ); 
   const j=id?jobById(id):null;
   const famOpts=SEED.families.map(f=>`<option value="${f.id}" ${j&&j.familyId===f.id?'selected':''}>${esc(f.titulo)}</option>`).join('');
   const f=j?famById(j.familyId):SEED.families[0];
   const nivOpts=(f?f.niveis:[]).map(n=>`<option ${j&&j.nivel===n?'selected':''}>${n}</option>`).join('');
   openModal(j?'Editar vaga':'Nova vaga',`
+   ${(!j)?jdSelectorHTML():''}
    <div class="grid g2">
      <div><label>Título da vaga</label><input id="j-tit" value="${esc(j?j.titulo:'')}"></div>
      <div><label>Trilha / cargo</label><select id="j-fam" onchange="jobNiv()">${famOpts}</select></div>
@@ -504,7 +698,7 @@ function saveJob(id){
     contrato:document.getElementById('j-con').value,local:document.getElementById('j-loc').value,status:document.getElementById('j-sta').value,
     recruiter:document.getElementById('j-rec').value,manager:document.getElementById('j-man').value,requisitos:reqs,
     extCode:document.getElementById('j-ext').value,posicoes:Number(document.getElementById('j-pos').value)||1,
-    regional:document.getElementById('j-reg').value,formato:document.getElementById('j-fmt').value,salario:document.getElementById('j-sal').value,custoSetor:document.getElementById('j-custo').value,custoSituacao:document.getElementById('j-sit').value};
+    regional:document.getElementById('j-reg').value,formato:document.getElementById('j-fmt').value,salario:document.getElementById('j-sal').value,custoSetor:document.getElementById('j-custo').value,custoSituacao:document.getElementById('j-sit').value,jdId:(window._jdSel||(id?((jobById(id)||{}).jdId||''):''))};
   if(id){Object.assign(jobById(id),data);} else {data.id=uid();data.code=nextCode(fam);data.openedAt=new Date().toISOString();S.jobs.push(data);}
   if(id){const j=jobById(id); if(j.status==='fechada'&&!j.filledAt)j.filledAt=new Date().toISOString();}
   Store.save();closeModal();renderJobs();
@@ -584,7 +778,8 @@ function iaLink(jobId){ const base=(S.config.iaUrl||'').trim(); if(!base){alert(
   const rb64=btoa(unescape(encodeURIComponent(JSON.stringify(reqs))));
   const _f=famById(j.familyId)||{}; const _comps=(_f.lideranca?(SEED.lead||[]):((_f.comps&&_f.comps.length?_f.comps:( _f.matrix||[])).map(c=>c.c))).slice(0,8);
   const cmp64=btoa(unescape(encodeURIComponent(JSON.stringify({trilha:_f.familia||_f.titulo,nivel:j.nivel,competencias:_comps}))));
-  const params='?vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo)+'&r='+encodeURIComponent(rb64)+'&cmp='+encodeURIComponent(cmp64)+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'');
+  const _JD=j.jdId?jdById(j.jdId):null; const _jdt=_JD?((_JD.requisitos||[]).concat(_JD.competencias||[])).map(r=>r.txt):[]; const jdt64=btoa(unescape(encodeURIComponent(JSON.stringify(_jdt))));
+  const params='?vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo)+'&r='+encodeURIComponent(rb64)+'&cmp='+encodeURIComponent(cmp64)+'&jdt='+encodeURIComponent(jdt64)+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'');
   const url=base+params;
   openModal('Link da entrevista por IA — '+j.code,`<p style="font-size:13px;color:var(--ink-soft)">Envie ao candidato. A IA conduz a entrevista com base nesta vaga e seus requisitos; o resultado entra em “Pré-triagens recebidas”.</p><textarea rows="3">${esc(url)}</textarea><div class="flexbtns"><a class="btn gold" href="${esc(url)}" target="_blank">Abrir</a><button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replace(/'/g,"\\'")}');badge('link copiado')">Copiar link</button></div>`);
 }
@@ -803,7 +998,7 @@ function tagCandSections(c){
 
 function openCand(id){
   const c=S.candidates.find(x=>x.id===id);if(!c)return; window._openCandId=id;const j=jobById(c.jobId);const fam=j?famById(j.familyId):null;
-  const comps=fam?compsForFamily(fam):[];
+  const comps=jdTechComps(j).concat(fam?compsForFamily(fam):[]).filter((v,i,a)=>a.indexOf(v)===i);
   openModal(c.nome+(j?' · '+j.code:''),`
    <div class="row" style="gap:18px;flex-wrap:wrap">
      <div style="flex:1;min-width:240px"><span class="tag">${esc(c.source||'')}</span> <span class="tag">${esc(c.stage)}</span> ${j?`<span class="tag">${esc(j.titulo)} (${j.contrato})</span>`:''}
@@ -997,7 +1192,7 @@ function renderSC(c,field,elId,comps){
   c[field]=c[field]||{};
   const host=document.getElementById(elId); if(!host)return;
   if(!comps.length){host.innerHTML='<div class="empty">Associe o candidato a uma vaga com cargo para carregar as competências.</div>';return;}
-  const qb=SEED.qbank||{};
+  const qb=Object.assign({}, SEED.qbank||{}, window._jdQ||{});
   host.innerHTML='<table><tr><th>Competência</th><th style="width:210px">Nota (1–5)</th><th style="width:90px">Perguntas</th></tr>'+comps.map((cp,i)=>{const v=c[field][i]||0;const has=qb[cp]&&qb[cp].length;
     return `<tr><td>${esc(cp)}</td>
       <td><div class="rate">${[1,2,3,4,5].map(n=>`<button class="${v===n?'on':''}" onclick="setSC('${c.id}','${field}',${i},${n})">${n}</button>`).join('')}<button class="rate-na ${v===-1?'on':''}" style="width:34px;height:28px;border-radius:7px;border:1px solid var(--line);background:${v===-1?'#eef2ff':'#fff'};font-size:11px;font-weight:800;color:var(--ink-soft)" onclick="setSC('${c.id}','${field}',${i},-1)">N/A</button></div></td>
@@ -1159,13 +1354,14 @@ const NIVEL_RESUMO={
 };
 function jobDescLinkedIn(id){
   const j=jobById(id); if(!j)return; const f=famById(j.familyId)||{};
+  const JD = j.jdId?jdById(j.jdId):null;
   const nivel=j.nivel||''; const nlabel=NIVEL_LABEL[nivel]||nivel; const nres=NIVEL_RESUMO[nivel]||'com responsabilidade sobre suas entregas';
   const comps=(f.comps&&f.comps.length?f.comps:(f.matrix||[])).map(c=>c.c);
   const lead=f.lideranca; 
   const resp = lead ? (SEED.lead||[]).slice(0,6) : comps.slice(0,6);
-  const respBullets = resp.length?resp:['Atuar nas rotinas da área com qualidade e ritmo','Colaborar com as áreas conectadas ao fluxo','Buscar melhoria contínua dos processos'];
-  const reqMust=(j.requisitos||[]).filter(r=>r.must).map(r=>r.txt);
-  const reqNice=(j.requisitos||[]).filter(r=>!r.must).map(r=>r.txt);
+  let respBullets = (JD&&JD.responsabilidades&&JD.responsabilidades.length)?JD.responsabilidades.slice(0,6):(resp.length?resp:['Atuar nas rotinas da área com qualidade e ritmo','Colaborar com as áreas conectadas ao fluxo','Buscar melhoria contínua dos processos']);
+  const reqMust=(JD&&JD.requisitos&&JD.requisitos.length)?JD.requisitos.filter(r=>r.must).map(r=>r.txt):(j.requisitos||[]).filter(r=>r.must).map(r=>r.txt);
+  const reqNice=(JD&&JD.requisitos&&JD.requisitos.length)?JD.requisitos.filter(r=>!r.must).map(r=>r.txt):(j.requisitos||[]).filter(r=>!r.must).map(r=>r.txt);
   const formato=j.formato||j.local||'Híbrido'; const local=j.regional||'';
   const cta = (S.config.candUrl? (S.config.candUrl+'?vaga='+encodeURIComponent(j.code)+'&titulo='+encodeURIComponent(j.titulo)+(S.config.backendUrl?'&be='+encodeURIComponent(S.config.backendUrl):'')) : '[link de candidatura]');
   const texto =
