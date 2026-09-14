@@ -239,11 +239,17 @@ function nextCode(familyId){ const a=AREA[familyId]||"GEN"; S.seq[a]=(S.seq[a]||
 /* ---------- Competencies for a family (for scorecards) ---------- */
 
 function jdTechComps(job){ window._jdQ=window._jdQ||{}; if(!job||!job.jdId)return []; const J=jdById(job.jdId); if(!J)return [];
-  const out=[]; const add=(txt,tipo)=>{ if(!txt)return; const label='[JD] '+txt; out.push(label);
+  const out=[];
+  // se há scorecard salvo/revisado no JD, usa ele (perguntas já revisadas pelo recrutador)
+  if(J.scorecard && J.scorecard.length){
+    J.scorecard.forEach(it=>{ if(!it.comp)return; const label='[JD] '+it.comp; out.push(label); window._jdQ[label]=(it.perguntas&&it.perguntas.length)?it.perguntas:['Peça um exemplo concreto sobre: '+it.comp]; });
+    return out;
+  }
+  const add=(txt)=>{ if(!txt)return; const label='[JD] '+txt; out.push(label);
     window._jdQ[label]=[ 'Fale sobre sua experiência prática com: '+txt+'. Peça um exemplo concreto (situação, o que fez, resultado).',
       'Como você comprovaria, na prática, domínio em "'+txt+'"?' ]; };
-  (J.requisitos||[]).forEach(r=>add(r.txt,'req'));
-  (J.competencias||[]).forEach(r=>add(r.txt,'comp'));
+  (J.requisitos||[]).forEach(r=>add(r.txt));
+  (J.competencias||[]).forEach(r=>add(r.txt));
   return out;
 }
 
@@ -394,6 +400,40 @@ function dashCostCharts(){
 
 
 /* ================= JOB DESCRIPTIONS ================= */
+
+/* ===== Scorecard salvável por vaga (gerado do JD + trilhas) ===== */
+function scorecardBaseFromJD(J){
+  const itens=[];
+  (J.requisitos||[]).forEach(r=>itens.push({comp:r.txt,tipo:'Técnico (JD)',must:!!r.must,perguntas:['Fale sobre sua experiência prática com: '+r.txt+'. Peça um exemplo concreto.']}));
+  (J.competencias||[]).forEach(r=>itens.push({comp:r.txt,tipo:'Competência-chave (JD)',must:!!r.must,perguntas:['Como você comprovaria domínio em "'+r.txt+'"? Peça exemplo.']}));
+  // trilhas: operacional núcleo + universais (sempre) — usa qbank quando houver
+  const qb=SEED.qbank||{};
+  (SEED.core.operacional||[]).forEach(c=>itens.push({comp:c,tipo:'Operacional (núcleo)',must:false,perguntas:qb[c]||[]}));
+  (SEED.core.universais||[]).forEach(c=>itens.push({comp:c,tipo:'Universal',must:false,perguntas:qb[c]||[]}));
+  return itens;
+}
+function gerarScorecardJD(id){ const J=jdById(id); if(!J)return;
+  if(!J.scorecard || !J.scorecard.length){ J.scorecard=scorecardBaseFromJD(J); Store.save(); }
+  editScorecardJD(id);
+}
+function editScorecardJD(id){ const J=jdById(id); if(!J)return; J.scorecard=J.scorecard||scorecardBaseFromJD(J);
+  const rows=J.scorecard.map((it,i)=>`<div class="grp" style="margin-bottom:8px">
+    <div class="row" style="align-items:center;gap:8px"><input value="${esc(it.comp)}" style="flex:1;font-weight:700" oninput="scEdit('${id}',${i},'comp',this.value)">
+      <span class="tag">${esc(it.tipo||'')}</span>
+      <label style="margin:0"><input type="checkbox" style="width:auto" ${it.must?'checked':''} onchange="scEdit('${id}',${i},'must',this.checked)"> obrig.</label>
+      <button class="btn sm ghost" onclick="scDel('${id}',${i})">×</button></div>
+    <label style="margin-top:6px">Perguntas (uma por linha)</label>
+    <textarea rows="2" oninput="scEdit('${id}',${i},'perguntas',this.value)">${esc((it.perguntas||[]).join('\n'))}</textarea>
+  </div>`).join('');
+  openModal('Scorecard — '+esc(J.nome),`
+    <p style="font-size:12px;color:var(--ink-soft)">Scorecard gerado do Job Description + competências das trilhas. Edite, remova ou acrescente itens/perguntas e salve — fica guardado nesta vaga (JD).</p>
+    <div id="sc-jd-wrap">${rows}</div>
+    <div class="flexbtns" style="margin-top:8px"><button class="btn" onclick="scAdd('${id}')">+ Item</button><button class="btn navy" onclick="Store.save();badge('scorecard salvo');closeModal();renderJD();">Salvar scorecard</button><button class="btn" onclick="editJDid('${id}')">Voltar ao JD</button></div>`);
+}
+function scEdit(id,i,campo,val){ const J=jdById(id); if(!J||!J.scorecard[i])return; if(campo==='perguntas'){J.scorecard[i].perguntas=val.split('\n').map(s=>s.trim()).filter(Boolean);} else {J.scorecard[i][campo]=val;} Store.save(); }
+function scDel(id,i){ const J=jdById(id); J.scorecard.splice(i,1); Store.save(); editScorecardJD(id); }
+function scAdd(id){ const J=jdById(id); J.scorecard.push({comp:'',tipo:'Adicionado',must:false,perguntas:[]}); Store.save(); editScorecardJD(id); }
+
 function jdSeed(){ return {id:uid(), titulo:'', familyId:'', nivel:'', modelo:'Remoto', local:'', contrato:'CLT', remFixa:'', remVar:'', beneficios:'', missao:'',
   responsabilidades:'', reqObrig:'', reqDesej:'', compChave:'', dos:'', donts:'', yellow:'',
   intake1:{perfil:'', expEntregas:'', senioridade:'', experiencias:''},
@@ -487,8 +527,8 @@ function renderJD(){
   const rows=S.jds.map(j=>`<tr>
     <td><b>${esc(j.nome||'(sem nome)')}</b><br><span class="tag">${esc(j.contrato||'')} · ${esc(j.modelo||'')}</span></td>
     <td>${esc((j.missao||'').slice(0,90))}${(j.missao||'').length>90?'…':''}</td>
-    <td>${(j.requisitos||[]).length} req · ${(j.competencias||[]).length} comp</td>
-    <td style="white-space:nowrap"><button class="btn sm" onclick="editJDid('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="copiarJD('${j.id}')">Copiar</button> <button class="btn sm ghost" onclick="abrirVagaDoJD('${j.id}')">Abrir vaga</button></td></tr>`).join('');
+    <td>${(j.requisitos||[]).length} req · ${(j.competencias||[]).length} comp${(j.scorecard&&j.scorecard.length)?'<br><span class="tag" style="background:#eef6ea;color:#256129">scorecard ✓</span>':''}</td>
+    <td style="white-space:nowrap"><button class="btn sm" onclick="editJDid('${j.id}')">Editar</button> <button class="btn sm ghost" onclick="copiarJD('${j.id}')">Copiar</button> <button class="btn sm ghost" onclick="abrirVagaDoJD('${j.id}')">Abrir vaga</button> <button class="btn sm ghost" onclick="gerarScorecardJD('${j.id}')">Scorecard</button></td></tr>`).join('');
   document.getElementById('v-jd').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Job Descriptions</div><div class="h-sub">Banco de descrições de vaga. Base para abrir vagas, gerar o scorecard técnico e o anúncio de divulgação.</div></div><button class="btn gold" onclick="novoJD()">+ Novo Job Description</button></div>
   ${S.jds.length?`<div class="card"><table><tr><th>Posição</th><th>Missão</th><th>Conteúdo</th><th></th></tr>${rows}</table></div>`:'<div class="empty">Nenhum Job Description ainda. Crie o primeiro — ele será a base para abrir vagas.</div>'}`;
@@ -811,7 +851,7 @@ function preInboxHTML(){
   const rows=inbox.map((r,i)=>{const cls=r.preDecision==='Seguir'?'aberta':(r.preDecision==='Não seguir'?'fechada':'pausada');
     return `<tr><td><b>${esc(r.nome||'—')}</b><br><span class="tag">${esc(r.email||'')}</span></td>
     <td>${esc(r.vagaTitulo||'')} <span class="tag">${esc(r.vagaCode||'')}</span></td>
-    <td><b>${r.preScore!=null?r.preScore:'—'}</b></td>
+    <td><b>${r.preScore!=null?r.preScore:'—'}</b>${r.persona_proxima?'<br><span class="tag" style="background:#eef2ff;color:#214498">'+esc(r.persona_proxima)+(r.persona_fit?' '+r.persona_fit+'%':'')+'</span>':''}</td>
     <td><span class="pill ${cls}">${esc(r.preDecision||'—')}</span>${(r.preFlags&&r.preFlags.length)?'<br><span class="tag" style="background:#fbe9ea;color:#8a2e33">'+esc(r.preFlags[0])+'</span>':''}${riscoIAtag(r)}</td>
     <td style="white-space:nowrap"><button class="btn sm gold" onclick="addPretriagem(${i})">Ver / adicionar</button> <button class="btn sm ghost" onclick="dismissPretriagem(${i})">Descartar</button></td></tr>`;}).join('');
   return `<div class="card" style="margin-bottom:12px;border:2px solid var(--gold)"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><div><b>Pré-triagens recebidas</b> <span class="tag" style="background:#fbe9ea;color:#8a2e33">${inbox.length}</span></div><div>${btns}</div></div>
@@ -830,6 +870,8 @@ function addPretriagem(i){ const r=(S._triagemInbox||[])[i]; if(!r)return;
     (r.preFlags&&r.preFlags.length)?('Alertas: '+r.preFlags.join('; ')):'',
     'Experiência: '+(r.anosExp||'-')+' anos · Pretensão: R$ '+(r.pretensao||'-')+' · Início: '+(r.inicio||'-')+' · Aceita formato: '+(r.aceitaFormato||'-'),
     'Requisitos: '+((r.reqRespostas||[]).map(x=>x.req+': '+(x.atende?'sim':'não')+(x.must?' (obrig.)':'')).join(' | ')),
+    'Persona mais próxima: '+(r.persona_proxima||'—')+(r.persona_fit?(' ('+r.persona_fit+'% fit)'):'')+(r.valores_destaque&&r.valores_destaque.length?(' · Valores em destaque: '+r.valores_destaque.join(', ')):''),
+    'Fit cultural: '+(r.fit_cultural!=null?r.fit_cultural:'—')+' · Fit remoto: '+(r.fit_remoto!=null?r.fit_remoto:'—')+' · Técnico: '+(r.tecnico!=null?r.tecnico:'—'),
     'Risco de IA (indício, não prova): '+(r.risco_ia||r.riscoIA||( (r.sinais&&((r.sinais.colagens||0)>=2||(r.sinais.respostasRapidas||0)>=2))?'alto':((r.sinais&&((r.sinais.colagens||0)>=1||(r.sinais.respostasRapidas||0)>=1))?'medio':'baixo')) )+(r.risco_ia_motivo?(' — '+r.risco_ia_motivo):'')+((r.sinais)?(' [colagens: '+(r.sinais.colagens||0)+', respostas muito rápidas: '+(r.sinais.respostasRapidas||0)+']'):''),
     'Motivo: '+(r.motivo||'-'),
     'Entrega de orgulho: '+(r.entrega||'-')
