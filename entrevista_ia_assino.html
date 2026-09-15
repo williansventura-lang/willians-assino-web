@@ -34,9 +34,9 @@ input,textarea{font-family:inherit;font-size:15px;border:1px solid var(--line);b
    <h2 style="color:var(--navy);margin-bottom:6px">Entrevista inicial</h2>
    <div id="vaga-box"></div>
    <p class="hint">Você vai conversar com nosso assistente por algumas perguntas (cerca de 5 min). Responda com sinceridade — é uma etapa inicial para entender seu perfil.</p>
-   <label>Seu nome</label><input id="nome" placeholder="Nome completo">
-   <label>E-mail</label><input id="email" type="email">
-   <label>Telefone / WhatsApp</label><input id="fone">
+   <label>Seu nome *</label><input id="nome" placeholder="Nome completo">
+   <label>E-mail *</label><input id="email" type="email">
+   <label>Telefone / WhatsApp *</label><input id="fone">
    <div class="card" style="background:var(--paper);margin-top:10px"><label class="consent"><input type="checkbox" id="consent"> Autorizo o uso das minhas respostas nesta avaliação, incluindo uma <b>análise inicial com apoio de inteligência artificial</b>. Sei que a decisão final é de uma pessoa do time e que posso pedir revisão humana.</label></div>
    <div id="err0" class="err hide"></div>
    <div style="margin-top:14px"><button class="btn gold" id="startBtn" onclick="start()">Começar entrevista</button></div>
@@ -85,6 +85,7 @@ async function callIA(){
 function start(){
   if(!v('nome')) return showErr('err0','Preencha seu nome.');
   if(!v('email')) return showErr('err0','Preencha seu e-mail.');
+  if(!v('fone')) return showErr('err0','Preencha seu telefone / WhatsApp.');
   if(!document.getElementById('consent').checked) return showErr('err0','Para continuar, é necessário autorizar o uso das respostas.');
   dados={nome:v('nome'),email:v('email'),telefone:v('fone')};
   document.getElementById('intro').classList.add('hide'); document.getElementById('conversa').classList.remove('hide');

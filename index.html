@@ -240,18 +240,16 @@ function nextCode(familyId){ const a=AREA[familyId]||"GEN"; S.seq[a]=(S.seq[a]||
 
 function jdTechComps(job){ window._jdQ=window._jdQ||{}; if(!job||!job.jdId)return []; const J=jdById(job.jdId); if(!J)return [];
   const out=[];
-  // se há scorecard salvo/revisado no JD, usa ele (perguntas já revisadas pelo recrutador)
+  // Só COMPETÊNCIAS-CHAVE entram no scorecard com nota (requisitos são Sim/Não, tratados à parte).
   if(J.scorecard && J.scorecard.length){
     J.scorecard.forEach(it=>{ if(!it.comp)return; const label='[JD] '+it.comp; out.push(label); window._jdQ[label]=(it.perguntas&&it.perguntas.length)?it.perguntas:['Peça um exemplo concreto sobre: '+it.comp]; });
     return out;
   }
-  const add=(txt)=>{ if(!txt)return; const label='[JD] '+txt; out.push(label);
-    window._jdQ[label]=[ 'Fale sobre sua experiência prática com: '+txt+'. Peça um exemplo concreto (situação, o que fez, resultado).',
-      'Como você comprovaria, na prática, domínio em "'+txt+'"?' ]; };
-  (J.requisitos||[]).forEach(r=>add(r.txt));
-  (J.competencias||[]).forEach(r=>add(r.txt));
+  (J.competencias||[]).forEach(r=>{ const txt=r.txt; if(!txt)return; const label='[JD] '+txt; out.push(label);
+    window._jdQ[label]=['Fale sobre sua experiência prática com: '+txt+'. Peça um exemplo concreto (situação, o que fez, resultado).','Como você comprovaria, na prática, domínio em "'+txt+'"?']; });
   return out;
 }
+function jdRequisitosOf(job){ if(!job||!job.jdId)return []; const J=jdById(job.jdId); if(!J)return []; return (J.requisitos||[]); }
 
 function compsForFamily(f){
   let list=[];
@@ -404,7 +402,7 @@ function dashCostCharts(){
 /* ===== Scorecard salvável por vaga (gerado do JD + trilhas) ===== */
 function scorecardBaseFromJD(J){
   const itens=[];
-  (J.requisitos||[]).forEach(r=>itens.push({comp:r.txt,tipo:'Técnico (JD)',must:!!r.must,perguntas:['Fale sobre sua experiência prática com: '+r.txt+'. Peça um exemplo concreto.']}));
+  // Requisitos NÃO entram no scorecard (são checklist Sim/Não). Apenas competências-chave têm nota.
   (J.competencias||[]).forEach(r=>itens.push({comp:r.txt,tipo:'Competência-chave (JD)',must:!!r.must,perguntas:['Como você comprovaria domínio em "'+r.txt+'"? Peça exemplo.']}));
   // trilhas: operacional núcleo + universais (sempre) — usa qbank quando houver
   const qb=SEED.qbank||{};
@@ -990,17 +988,19 @@ function addCand(){
   const jobOpts=S.jobs.map(j=>`<option value="${j.id}" ${j.id===CURJOB?'selected':''}>${esc(j.code)} — ${esc(j.titulo)}</option>`).join('');
   openModal('Novo candidato',`
    <div class="grid g2">
-    <div><label>Nome</label><input id="c-nome"></div>
+    <div><label>Nome *</label><input id="c-nome"></div>
     <div><label>Vaga</label><select id="c-job">${jobOpts||'<option value="">(sem vaga)</option>'}</select></div>
-    <div><label>E-mail</label><input id="c-email"></div>
-    <div><label>Telefone</label><input id="c-fone"></div>
+    <div><label>E-mail *</label><input id="c-email"></div>
+    <div><label>Telefone *</label><input id="c-fone"></div>
     <div><label>LinkedIn (URL)</label><input id="c-lk"></div>
     <div><label>Fonte</label><select id="c-src">${SEED.fonteList.map(x=>`<option>${x}</option>`).join('')}</select></div>
    </div>
    <div class="flexbtns"><button class="btn navy" onclick="saveCand()">Adicionar candidato</button></div>`);
 }
 function saveCand(){
-  const c={id:uid(),jobId:document.getElementById('c-job').value,nome:document.getElementById('c-nome').value.trim()||'(sem nome)',
+  const _n=document.getElementById('c-nome').value.trim(), _e=document.getElementById('c-email').value.trim(), _f=document.getElementById('c-fone').value.trim();
+  if(!_n||!_e||!_f){ alert('Nome, e-mail e telefone são obrigatórios.'); return; }
+  const c={id:uid(),jobId:document.getElementById('c-job').value,nome:_n||'(sem nome)',
     email:document.getElementById('c-email').value,phone:document.getElementById('c-fone').value,linkedin:document.getElementById('c-lk').value,
     source:document.getElementById('c-src').value,stage:'Busca ativa',createdAt:new Date().toISOString(),
     disc:{D:0,I:0,S:0,C:0,done:false},persona:{},principios:[],scRecruiter:{},scManager:{},aderencia:{},notes:'',recommendation:{}};
@@ -1066,7 +1066,7 @@ function openCand(id){
          <div><label>Telefone / WhatsApp</label><input value="${esc(c.phone||'')}" oninput="saveField('${c.id}','phone',this.value);tagCandSections(S.candidates.find(x=>x.id==='${c.id}'))" placeholder="(11) 90000-0000"></div>
          <div><label>LinkedIn</label><input value="${esc(c.linkedin||'')}" oninput="saveField('${c.id}','linkedin',this.value);tagCandSections(S.candidates.find(x=>x.id==='${c.id}'))" placeholder="linkedin.com/in/..."></div>
        </div></div>
-     <div style="text-align:right"><div class="l" style="font-size:11px;color:var(--ink-faint)">RECOMENDAÇÃO</div><div id="c-reco-mini">—</div></div>
+     <div style="text-align:right"><button class="btn navy sm" onclick="moveStage('${c.id}')" style="margin-bottom:6px">Mover etapa ▸</button><div class="l" style="font-size:11px;color:var(--ink-faint)">RECOMENDAÇÃO</div><div id="c-reco-mini">—</div></div>
    </div>
 
    <div id="stage-bar"></div>
@@ -1085,7 +1085,8 @@ function openCand(id){
      <button class="btn sm" onclick="addTechTest('${c.id}')">+ Adicionar teste</button></div>
    <div class="sec" data-gate="Entrevista"><h4>3. Fit cultural — as personas têm voz</h4><div id="persona-area"></div>
      <div style="margin-top:10px"><label>Aderência aos 8 princípios do revezamento (média)</label><div id="princ-area"></div></div></div>
-   <div class="sec" data-gate="Entrevista"><h4>4. Aderência de perfil à vaga</h4><div id="ader-area"></div></div>
+   <div class="sec" data-gate="Triagem"><h4>4. Requisitos da vaga (Sim/Não)</h4><div id="req-area"></div></div>
+   <div class="sec" data-gate="Entrevista"><h4>5. Aderência de perfil à vaga</h4><div id="ader-area"></div></div>
    <div class="sec" data-gate="Entrevista"><h4>5. Entrevista por competência — preparação (STAR)</h4>
      <div class="reco n" style="font-weight:500;font-size:12.5px">${(SEED.star||[]).map(s=>'• '+esc(s)).join('<br>')}</div>
      <p style="font-size:12px;color:var(--ink-soft);margin-top:8px">Nas competências abaixo, clique em <b>ver</b> para as perguntas sugeridas de cada competência. Preencha as notas do <b>recrutador</b> e do <b>gestor</b> — cada um avalia a sua parte.</p></div>
@@ -1107,7 +1108,7 @@ function openCand(id){
    ${c.cvText?('<div class="sec" data-gate="Testes"><h4>Currículo (texto extraído)</h4><textarea rows="5" oninput="saveField(\''+c.id+'\',\'cvText\',this.value)">'+esc(c.cvText)+'</textarea></div>'):''}
    <div class="sec" data-gate="Testes"><label>Anotações da triagem / observações</label><textarea id="c-notes" rows="3" oninput="saveField('${c.id}','notes',this.value);tagCandSections(S.candidates.find(x=>x.id==='${c.id}'))" placeholder="Uma linha do que você avaliou na triagem já libera o avanço para Testes (útil para indicações sem currículo).">${esc(c.notes||'')}</textarea></div>
   `);
-  renderDISC(c);renderTech(c);renderPersonas(c);renderPrinc(c);renderAder(c,j);renderSC(c,'scRecruiter','sc-rec',comps);renderSC(c,'scManager','sc-man',comps);renderRecoArea(c);
+  renderDISC(c);renderTech(c);renderPersonas(c);renderPrinc(c);renderReq(c,j);renderAder(c,j);renderSC(c,'scRecruiter','sc-rec',comps);renderSC(c,'scManager','sc-man',comps);renderRecoArea(c);
   tagCandSections(c);
 }
 
@@ -1241,6 +1242,20 @@ function renderPrinc(c){
     </div>`;}).join('');
 }
 function setPrinc(id,i,v){const c=S.candidates.find(x=>x.id===id);c.principios=c.principios||[];c.principios[i]=v;Store.save();renderPrinc(c);}
+
+function renderReq(c,j){ const host=document.getElementById('req-area'); if(!host)return;
+  const reqs = (j&&j.jdId)?jdRequisitosOf(j):[];
+  if(!reqs.length){ host.innerHTML='<div class="empty">Sem requisitos cadastrados no Job Description desta vaga.</div>'; return; }
+  c.reqCheck=c.reqCheck||{};
+  host.innerHTML='<p style="font-size:12px;color:var(--ink-soft)">Requisitos não recebem nota — apenas confirme se o candidato atende (ex.: escolaridade, certificação).</p>'+
+    reqs.map((r,i)=>{const v=c.reqCheck[i];return '<div class="row" style="align-items:center;margin-bottom:5px"><div style="flex:1;font-size:13px">'+esc(r.txt)+(r.must?' <span class="tag" style="background:#fbe9ea;color:#8a2e33">obrigatório</span>':'')+'</div>'+
+      '<div class="yn" style="display:flex;gap:6px"><button class="btn sm '+(v==='sim'?'gold':'ghost')+'" onclick="setReq(\''+c.id+'\','+i+',\'sim\')">Sim</button>'+
+      '<button class="btn sm '+(v==='nao'?'danger':'ghost')+'" onclick="setReq(\''+c.id+'\','+i+',\'nao\')">Não</button></div></div>';}).join('');
+  const faltaObrig = reqs.some((r,i)=>r.must && c.reqCheck[i]==='nao');
+  if(faltaObrig) host.insertAdjacentHTML('beforeend','<div class="reco b" style="margin-top:8px;padding:8px 12px">⚠ Candidato não atende a um requisito obrigatório.</div>');
+}
+function setReq(id,i,v){const c=S.candidates.find(x=>x.id===id);c.reqCheck=c.reqCheck||{};c.reqCheck[i]=v;Store.save();const j=jobById(c.jobId);renderReq(c,j);}
+
 function renderAder(c,j){
   if(!j||!j.requisitos||!j.requisitos.length){document.getElementById('ader-area').innerHTML='<div class="empty">Sem requisitos cadastrados na vaga. Adicione requisitos na aba Vagas.</div>';return;}
   c.aderencia=c.aderencia||{};

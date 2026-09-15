@@ -48,7 +48,7 @@ input,select,textarea{font-family:inherit;font-size:14px;border:1px solid var(--
    <h2 style="color:var(--navy);font-size:20px;margin-bottom:6px">Seus dados</h2>
    <label>Nome completo *</label><input id="d-nome">
    <label>E-mail *</label><input id="d-email" type="email">
-   <label>Telefone / WhatsApp</label><input id="d-fone">
+   <label>Telefone / WhatsApp *</label><input id="d-fone">
    <label>LinkedIn</label><input id="d-lk">
    <div id="err1" class="err hide"></div>
    <div style="margin-top:14px"><button class="btn gold" onclick="go(2)">Continuar</button></div>
@@ -102,7 +102,7 @@ function start(){ if(!document.getElementById('c-consent').checked){ alert('Para
 function go(n){ document.getElementById(order[step]).classList.remove('active'); 
   if(n===2){ /*nothing*/ }
   if(step===1||n> step){ /* validate step 1 */ }
-  if(step===1){ if(!v('d-nome')){return showErr('err1','Preencha seu nome.');} if(!v('d-email')){return showErr('err1','Preencha seu e-mail.');} }
+  if(step===1){ if(!v('d-nome')){return showErr('err1','Preencha seu nome.');} if(!v('d-email')){return showErr('err1','Preencha seu e-mail.');} if(!v('d-fone')){return showErr('err1','Preencha seu telefone / WhatsApp.');} }
   step=n; document.getElementById(order[step]).classList.add('active'); setProg(); window.scrollTo(0,0);
 }
 function v(id){const e=document.getElementById(id);return e?e.value.trim():'';}
