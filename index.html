@@ -44,7 +44,7 @@ td{border-bottom:1px solid var(--line);padding:9px;vertical-align:middle}
 tr:hover td{background:#fafbfe}
 .pill{display:inline-block;border-radius:99px;padding:2px 9px;font-size:11px;font-weight:800}
 .pill.clt{background:#eaf0ff;color:var(--blue-600)}.pill.pj{background:#f6efd8;color:var(--warn)}
-.pill.aberta{background:#eef6ea;color:var(--ok)}.pill.pausada{background:#f6efd8;color:var(--warn)}.pill.fechada{background:#eee;color:var(--ink-faint)}
+.pill.congelada{background:#e8eefc;color:#3557b7}.pill.cancelada{background:#f0e6e7;color:#8a6d70}.pill.aberta{background:#eef6ea;color:var(--ok)}.pill.pausada{background:#f6efd8;color:var(--warn)}.pill.fechada{background:#eee;color:var(--ink-faint)}
 .code{font-family:"JetBrains Mono";font-weight:700;color:var(--blue-600);font-size:12px}
 .kanban{display:grid;grid-template-columns:repeat(9,minmax(150px,1fr));gap:10px;overflow-x:auto;padding-bottom:10px}
 .kcol{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:8px;min-height:120px}
@@ -323,7 +323,7 @@ function renderDash(){
   const perVaga=jobs.map(j=>({label:j.code+' · '+j.titulo,value:candsOf(j.id).length})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value).slice(0,12);
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FDASH.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
   const vagaOpts=['<option value="">Todas as vagas</option>'].concat(S.jobs.map(j=>`<option value="${j.id}" ${FDASH.vaga===j.id?'selected':''}>${esc(j.code)} — ${esc(j.titulo)}</option>`)).join('');
-  const statusChips=['aberta','pausada','fechada'].map(st=>{const on=(FDASH.status||[]).includes(st);
+  const statusChips=['aberta','pausada','congelada','cancelada','fechada'].map(st=>{const on=(FDASH.status||[]).includes(st);
     return `<button onclick="toggleDashStatus('${st}')" style="border:1px solid ${on?'#214498':'#E2E6F0'};background:${on?'#214498':'#fff'};color:${on?'#fff':'#4C5573'};border-radius:99px;padding:6px 14px;font-weight:700;font-size:12.5px;cursor:pointer">${on?'✓ ':''}${st}</button>`;}).join(' ');
   document.getElementById('v-dash').innerHTML=`
   <div class="h-title">Dashboard</div><div class="h-sub">Filtros de status, gestor e vaga refletem em todos os indicadores.</div>
@@ -351,7 +351,111 @@ function renderDash(){
     ${openBars.length?svgBars(openBars,{lblW:360,rh:28,w:820,lblChars:56}):'<div class="empty">Nenhuma vaga aberta no filtro.</div>'}
     ${openAges.length?`<table style="margin-top:14px"><tr><th>Vaga</th><th>Gestor</th><th>Dias em aberto</th><th>Média histórica</th></tr>${openAges.slice(0,20).map(x=>{const avg=roleCnt[x.j.titulo]?Math.round(roleAvg[x.j.titulo]/roleCnt[x.j.titulo]):null;const late=avg!=null&&x.age>avg;return `<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${esc(x.j.manager||'—')}</td><td style="font-weight:800;color:${x.age>45?'#A33A40':(x.age>25?'#B5761A':'#2F7A34')}">${x.age}d</td><td>${avg!=null?avg+'d'+(late?' ⚠️':''):'—'}</td></tr>`;}).join('')}</table>`:''}
   </div>
-  ${dashCostCharts()}`;
+  ${dashCostCharts()}
+  ${dashAnalytics()}`;
+}
+
+
+/* ===== Helpers de gráfico ===== */
+function money0(v){return 'R$ '+Math.round(v).toLocaleString('pt-BR');}
+function svgLine(series, opts){ // series:[{nome,cor,pts:[{x,y}]}] com x categórico via labels
+  opts=opts||{}; const labels=opts.labels||[]; const w=opts.w||820,hh=opts.h||240,padL=42,padB=28,padT=12,padR=12;
+  const allY=series.flatMap(s=>s.pts.map(p=>p.y)); const maxY=Math.max(1,...allY);
+  const n=labels.length||Math.max(...series.map(s=>s.pts.length));
+  const X=i=> padL + (n<=1?0:(i*(w-padL-padR)/(n-1)));
+  const Y=v=> hh-padB - (v/maxY)*(hh-padB-padT);
+  let g='';
+  // grid y (0, meio, max)
+  [0,maxY/2,maxY].forEach(v=>{ g+=`<line x1="${padL}" y1="${Y(v)}" x2="${w-padR}" y2="${Y(v)}" stroke="#eef1f7"/><text x="0" y="${Y(v)+4}" font-size="10" fill="#8A92AC" font-family="Manrope">${Math.round(v)}</text>`; });
+  // x labels
+  labels.forEach((l,i)=>{ if(n>12 && i%2) return; g+=`<text x="${X(i)}" y="${hh-8}" font-size="10" fill="#8A92AC" font-family="Manrope" text-anchor="middle">${escSvg(l,8)}</text>`; });
+  series.forEach(s=>{ const d=s.pts.map((p,i)=>(i?'L':'M')+X(i)+' '+Y(p.y)).join(' ');
+    g+=`<path d="${d}" fill="none" stroke="${s.cor}" stroke-width="2.5"/>`;
+    s.pts.forEach((p,i)=>{ g+=`<circle cx="${X(i)}" cy="${Y(p.y)}" r="3" fill="${s.cor}"/>`; });
+  });
+  // legenda
+  let lg=series.map((s,i)=>`<span style="font-size:11.5px;color:#4C5573;margin-right:14px"><span style="display:inline-block;width:10px;height:10px;background:${s.cor};border-radius:2px;margin-right:4px"></span>${escSvg(s.nome,30)}</span>`).join('');
+  return `<div>${lg}</div><svg viewBox="0 0 ${w} ${hh}" width="100%" style="max-width:100%">${g}</svg>`;
+}
+function mesAno(d){ const x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0'); }
+function mesLabel(ym){ const [y,m]=ym.split('-'); return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2); }
+
+let FTTF={mes:'',vaga:''};
+function dashAnalytics(){
+  const jobsAll=S.jobs; const cands=S.candidates;
+  // ---- 5) Funil por etapa com % + reprovação por vaga ----
+  const total=cands.length||1;
+  const funil=STAGES.map(st=>{const n=cands.filter(c=>c.stage===st).length;return {label:st,n,pct:Math.round(n/total*100)};});
+  const funilBars=funil.map(f=>({label:f.label+' ('+f.pct+'%)',value:f.n,color:f.label==='Reprovado'?'#A33A40':(f.label==='Contratado'?'#2F7A34':'#2C57C8')}));
+  // reprovação por vaga: reprovados/total por vaga (top)
+  const repv=jobsAll.map(j=>{const cs=candsOf(j.id);const rep=cs.filter(c=>c.stage==='Reprovado'||c.statusAtual==='Reprovado'||c.statusAtual==='Candidato Declinou').length;return {j,total:cs.length,rep,taxa:cs.length?Math.round(rep/cs.length*100):0};}).filter(x=>x.total>=3).sort((a,b)=>b.taxa-a.taxa).slice(0,10);
+  // ---- 3) TTF por etapa (média de dias por etapa, do stageHist) ----
+  const etAcc={}; STAGES.forEach(s=>etAcc[s]=[]);
+  cands.forEach(c=>{ (c.stageHist||[]).forEach(hh=>{ if(hh.dias!=null && etAcc[hh.etapa]!=null) etAcc[hh.etapa].push(hh.dias); }); });
+  const etBars=STAGES.filter(s=>etAcc[s].length).map(s=>{const arr=etAcc[s];const m=arr.reduce((a,b)=>a+b,0)/arr.length;return {label:s,value:Math.round(m),suffix:'d',color:m>15?'#A33A40':(m>7?'#E7A317':'#2F7A34')};});
+  // ---- 6) TTF filtrável (por mês de contratação e vaga) ----
+  const hired=cands.filter(c=>c.stage==='Contratado'&&c.hiredAt);
+  let hf=hired.slice();
+  if(FTTF.vaga) hf=hf.filter(c=>c.jobId===FTTF.vaga);
+  if(FTTF.mes) hf=hf.filter(c=>mesAno(c.hiredAt)===FTTF.mes);
+  const ttfByMonth={};
+  hf.forEach(c=>{const j=jobById(c.jobId);if(!j||!j.openedAt)return;const d=daysBetween(j.openedAt,c.hiredAt);const ym=mesAno(c.hiredAt);(ttfByMonth[ym]=ttfByMonth[ym]||[]).push(d);});
+  const meses=Object.keys(ttfByMonth).sort();
+  const ttfLine=[{nome:'Time-to-fill médio (dias)',cor:'#214498',pts:meses.map(m=>({x:m,y:Math.round(ttfByMonth[m].reduce((a,b)=>a+b,0)/ttfByMonth[m].length)}))}];
+  const ttfGeral=hf.length?Math.round(hf.map(c=>{const j=jobById(c.jobId);return j&&j.openedAt?daysBetween(j.openedAt,c.hiredAt):null;}).filter(x=>x!=null).reduce((a,b,i,ar)=>a+b/ar.length,0)):null;
+  const mesesOpt=[...new Set(hired.map(c=>mesAno(c.hiredAt)))].sort();
+  const vagasOpt=[...new Set(hired.map(c=>c.jobId))];
+  // ---- 4) Linha do tempo: vagas por mês, aumento vs substituição ----
+  const abertMes={};
+  jobsAll.forEach(j=>{ if(!j.openedAt)return; const ym=mesAno(j.openedAt); abertMes[ym]=abertMes[ym]||{aum:0,sub:0};
+    const sit=j.custoSituacao||(j.reqTipoVaga==='Substituição'?'subst_vazia':'aumento');
+    if(sit&&sit.indexOf('subst')===0) abertMes[ym].sub++; else abertMes[ym].aum++; });
+  const mesesTL=Object.keys(abertMes).sort();
+  const tlLine=[
+    {nome:'Aumento de quadro',cor:'#2C57C8',pts:mesesTL.map(m=>({x:m,y:abertMes[m].aum}))},
+    {nome:'Substituição',cor:'#A33A40',pts:mesesTL.map(m=>({x:m,y:abertMes[m].sub}))}
+  ];
+  // por área (família) — substituições acumuladas (sinal de problema)
+  const subArea={}; jobsAll.forEach(j=>{const sit=j.custoSituacao||'';if(sit.indexOf('subst')===0){const f=famById(j.familyId);const nome=f?f.familia:j.familyId;subArea[nome]=(subArea[nome]||0)+1;}});
+  const subAreaBars=Object.entries(subArea).map(([k,v])=>({label:k,value:v,color:'#A33A40'})).sort((a,b)=>b.value-a.value).slice(0,10);
+  // ---- 7) Curva de ramp-up por área (da aba Custo) ----
+  const kc=(typeof computeCusto==='function')?computeCusto().k:null;
+  let rampLine=null;
+  if(kc){ const rampPre=kc.rampPre||60, rampPos=kc.rampPos||90;
+    const pts=(ramp)=>{const arr=[];for(let d=0;d<=ramp;d+=Math.max(1,Math.round(ramp/6))){arr.push({x:d+'d',y:Math.round(Math.min(100,(d/ramp)*100))});}arr.push({x:ramp+'d',y:100});return arr;};
+    rampLine=[{nome:'Pré-venda ('+rampPre+'d)',cor:'#2C57C8',pts:pts(rampPre)},{nome:'Pós-venda ('+rampPos+'d)',cor:'#E7A317',pts:pts(rampPos)}];
+  }
+  return `
+  <div class="card" style="margin-top:16px"><h4 style="margin-bottom:4px">Funil por etapa (% do total)</h4>
+    <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">${cands.length} candidatos no total. % = fatia da etapa.</p>
+    ${svgBars(funilBars,{lblW:170,rh:24,w:640})}
+    ${repv.length?`<h4 style="margin:14px 0 6px">Taxa de reprovação/declínio por vaga</h4><table><tr><th>Vaga</th><th>Candidatos</th><th>Reprov./declínio</th><th>Taxa</th></tr>${repv.map(x=>`<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${x.total}</td><td>${x.rep}</td><td style="font-weight:800;color:${x.taxa>70?'#A33A40':(x.taxa>50?'#B5761A':'#2F7A34')}">${x.taxa}%</td></tr>`).join('')}</table>`:''}
+  </div>
+
+  <div class="card"><h4 style="margin-bottom:4px">Time-to-fill por etapa (média de dias)</h4>
+    <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">Onde o processo mais demora — inclui esperas externas (ex.: agenda do gestor). Enche conforme você movimenta candidatos.</p>
+    ${etBars.length?svgBars(etBars,{lblW:150,rh:24,w:600}):'<div class="empty">Ainda sem histórico de etapas. Vai preencher conforme os candidatos avançam de fase.</div>'}
+  </div>
+
+  <div class="card"><h4 style="margin-bottom:8px">Time-to-fill — evolução</h4>
+    <div class="row" style="gap:10px;align-items:end;margin-bottom:8px">
+      <div><label>Mês</label><select onchange="FTTF.mes=this.value;renderDash()"><option value="">Todos</option>${mesesOpt.map(m=>`<option value="${m}" ${FTTF.mes===m?'selected':''}>${mesLabel(m)}</option>`).join('')}</select></div>
+      <div><label>Vaga</label><select onchange="FTTF.vaga=this.value;renderDash()"><option value="">Todas</option>${vagasOpt.map(id=>{const j=jobById(id);return `<option value="${id}" ${FTTF.vaga===id?'selected':''}>${j?esc(j.code+' '+j.titulo):id}</option>`;}).join('')}</select></div>
+      <div class="kpi lite" style="padding:8px 14px"><div class="v" style="font-size:22px">${ttfGeral!=null?ttfGeral+'d':'—'}</div><div class="l">TTF no filtro</div></div>
+    </div>
+    ${meses.length?svgLine(ttfLine,{labels:meses.map(mesLabel),w:820,h:230}):'<div class="empty">Sem contratações no filtro.</div>'}
+  </div>
+
+  <div class="card"><h4 style="margin-bottom:4px">Vagas abertas na linha do tempo — aumento × substituição</h4>
+    <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">Muitas substituições numa área é sinal de alerta (turnover).</p>
+    ${mesesTL.length?svgLine(tlLine,{labels:mesesTL.map(mesLabel),w:820,h:230}):'<div class="empty">Sem histórico de aberturas.</div>'}
+    ${subAreaBars.length?`<h4 style="margin:14px 0 6px">Substituições por área (acumulado)</h4>${svgBars(subAreaBars,{lblW:200,rh:22,w:560})}`:''}
+  </div>
+
+  ${rampLine?`<div class="card"><h4 style="margin-bottom:4px">Curva de ramp-up por área</h4>
+    <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">Tendência de entrega do novo colaborador até atingir 100% de produtividade (premissas da aba Custo).</p>
+    ${svgLine(rampLine,{labels:rampLine[0].pts.map(p=>p.x),w:820,h:230})}</div>`:''}
+  `;
 }
 
 function dashCostKPI(){
@@ -662,7 +766,7 @@ function renderJobs(){
   <div class="card" style="margin-bottom:12px"><div class="row" style="gap:10px;align-items:end">
      <div style="flex:1;min-width:200px"><label>Buscar (título, código, gestor)</label><input value="${esc(FJOB.q)}" oninput="FJOB.q=this.value;renderJobs()"></div>
      <div style="min-width:200px"><label>Gestor</label><select onchange="FJOB.gestor=this.value;renderJobs()">${gestOpts}</select></div>
-     <div style="min-width:150px"><label>Status</label><select onchange="FJOB.status=this.value;renderJobs()"><option value="">Todos</option>${['aberta','pausada','fechada'].map(s=>`<option ${FJOB.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+     <div style="min-width:150px"><label>Status</label><select onchange="FJOB.status=this.value;renderJobs()"><option value="">Todos</option>${['aberta','pausada','congelada','cancelada','fechada'].map(s=>`<option ${FJOB.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
      ${(FJOB.q||FJOB.gestor||FJOB.status)?`<button class="btn sm" onclick="FJOB={q:'',gestor:'',status:''};renderJobs()">Limpar</button>`:''}
   </div></div>
   ${arr.length?`<div class="card"><table><tr><th>Código</th><th>Vaga</th><th>Gestor / Recrutador</th><th>Tipo</th><th>Status</th><th>Cand.</th><th>Tempo</th><th></th></tr>${rows}</table></div>`:'<div class="empty">Nenhuma vaga no filtro.</div>'}`;
@@ -707,7 +811,8 @@ function editJob(id){
      <div><label>Nível</label><select id="j-niv">${nivOpts}</select></div>
      <div><label>Contratação</label><select id="j-con"><option ${j&&j.contrato==='CLT'?'selected':''}>CLT</option><option ${j&&j.contrato==='PJ'?'selected':''}>PJ</option></select></div>
      <div><label>Local / modelo</label><input id="j-loc" value="${esc(j?j.local:'Remoto')}"></div>
-     <div><label>Status</label><select id="j-sta"><option ${!j||j.status==='aberta'?'selected':''}>aberta</option><option ${j&&j.status==='pausada'?'selected':''}>pausada</option><option ${j&&j.status==='fechada'?'selected':''}>fechada</option></select></div>
+     <div><label>Status</label><select id="j-sta"><option ${!j||j.status==='aberta'?'selected':''}>aberta</option><option ${j&&j.status==='pausada'?'selected':''}>pausada</option><option ${j&&j.status==='congelada'?'selected':''}>congelada</option><option ${j&&j.status==='cancelada'?'selected':''}>cancelada</option><option ${j&&j.status==='fechada'?'selected':''}>fechada</option></select></div>
+     <div><label>Processo seletivo</label><select id="j-proc"><option value="externo" ${!j||j.processo==='externo'?'selected':''}>Externo</option><option value="interno" ${j&&j.processo==='interno'?'selected':''}>Interno</option><option value="ambos" ${j&&j.processo==='ambos'?'selected':''}>Interno/Externo</option></select></div>
      <div><label>Recrutador(a)</label><input id="j-rec" value="${esc(j?j.recruiter:'')}"></div>
      <div><label>Gestor(a) da vaga</label><input id="j-man" value="${esc(j?j.manager:'')}"></div>
      <div><label>Código externo (ex.: W0052)</label><input id="j-ext" value="${esc(j?j.extCode:'')}"></div>
@@ -736,7 +841,7 @@ function saveJob(id){
     contrato:document.getElementById('j-con').value,local:document.getElementById('j-loc').value,status:document.getElementById('j-sta').value,
     recruiter:document.getElementById('j-rec').value,manager:document.getElementById('j-man').value,requisitos:reqs,
     extCode:document.getElementById('j-ext').value,posicoes:Number(document.getElementById('j-pos').value)||1,
-    regional:document.getElementById('j-reg').value,formato:document.getElementById('j-fmt').value,salario:document.getElementById('j-sal').value,custoSetor:document.getElementById('j-custo').value,custoSituacao:document.getElementById('j-sit').value,jdId:(window._jdSel||(id?((jobById(id)||{}).jdId||''):''))};
+    regional:document.getElementById('j-reg').value,formato:document.getElementById('j-fmt').value,salario:document.getElementById('j-sal').value,custoSetor:document.getElementById('j-custo').value,custoSituacao:document.getElementById('j-sit').value,jdId:(window._jdSel||(id?((jobById(id)||{}).jdId||''):'')),processo:(document.getElementById('j-proc')?document.getElementById('j-proc').value:'externo')};
   if(id){Object.assign(jobById(id),data);} else {data.id=uid();data.code=nextCode(fam);data.openedAt=new Date().toISOString();S.jobs.push(data);}
   if(id){const j=jobById(id); if(j.status==='fechada'&&!j.filledAt)j.filledAt=new Date().toISOString();}
   Store.save();closeModal();renderJobs();
@@ -777,7 +882,7 @@ function renderPipe(){
     return `<div class="kcol" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event,'${st}')"><h4>${st}<span>${list.length}</span></h4>${items}</div>`;
   }).join('');
   const gestOpts=['<option value="">Todos os gestores</option>'].concat(uniqGestores().map(g=>`<option value="${esc(g)}" ${FPIPE.gestor===g?'selected':''}>${esc(g)}</option>`)).join('');
-  const statusOpts=[['','Todos os status'],['aberta','Abertas'],['pausada','Pausadas'],['fechada','Fechadas']].map(o=>`<option value="${o[0]}" ${FPIPE.status===o[0]?'selected':''}>${o[1]}</option>`).join('');
+  const statusOpts=[['','Todos os status'],['aberta','Abertas'],['pausada','Pausadas'],['congelada','Congeladas'],['cancelada','Canceladas'],['fechada','Fechadas']].map(o=>`<option value="${o[0]}" ${FPIPE.status===o[0]?'selected':''}>${o[1]}</option>`).join('');
   const vagaOpts=['<option value="__ALL__" '+(aggregate?'selected':'')+'>▸ Todas as vagas do filtro</option>'].concat(jobs.map(j=>`<option value="${j.id}" ${FPIPE.vaga===j.id?'selected':''}>${esc(j.code)} — ${esc(j.titulo)}${j.manager?' · '+esc(j.manager):''}</option>`)).join('');
   document.getElementById('v-pipe').innerHTML=`
   <div class="row" style="justify-content:space-between;align-items:center"><div><div class="h-title">Pipeline</div><div class="h-sub">${esc(headerInfo)}</div></div>
@@ -799,7 +904,7 @@ function dragLeave(e){e.currentTarget.classList.remove('over');}
 function drop(e,st){e.preventDefault();e.currentTarget.classList.remove('over');const c=S.candidates.find(x=>x.id===DRAG);if(!c)return;
   const chk=canEnter(c,st);
   if(!chk.ok){ alert('Não é possível mover para "'+st+'".\n\n'+chk.msg); renderPipe(); return; }
-  c.stage=st;
+  registrarEtapa(c,st);c.stage=st;
   if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j&&j.status!=='fechada'){j.status='fechada';j.filledAt=c.hiredAt;}}
   Store.save();renderPipe();
   offerStageMessage(c.id,st);
@@ -1331,10 +1436,18 @@ function renderRecoArea(c){
 }
 function moveStage(id){const c=S.candidates.find(x=>x.id===id);const i=STAGES.indexOf(c.stage);const opts=STAGES.map((s,k)=>`<option value="${s}" ${s===c.stage?'selected':''}>${s}</option>`).join('');
   openModal('Mover etapa — '+c.nome,`<label>Etapa</label><select id="mv">${opts}</select><div class="flexbtns"><button class="btn navy" onclick="doMove('${id}')">Mover</button><button class="btn" onclick="openCand('${id}')">Cancelar</button></div>`);}
+
+function registrarEtapa(c,novaEtapa){ if(!c)return; if(c.stage===novaEtapa)return; c.stageHist=c.stageHist||[];
+  const now=new Date().toISOString();
+  // fecha a duração da etapa anterior
+  if(c.stageHist.length){ const last=c.stageHist[c.stageHist.length-1]; if(!last.saida){ last.saida=now; last.dias=Math.max(0,Math.round((new Date(now)-new Date(last.entrada))/86400000)); } }
+  c.stageHist.push({etapa:novaEtapa, entrada:now, saida:null, dias:null});
+}
+
 function doMove(id){const c=S.candidates.find(x=>x.id===id);const st=document.getElementById('mv').value;
   const chk=canEnter(c,st);
   if(!chk.ok){ alert('Não é possível mover para "'+st+'".\n\n'+chk.msg); return; }
-  c.stage=st;if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j){j.status='fechada';j.filledAt=c.hiredAt;}}Store.save();openCand(id);
+  registrarEtapa(c,st);c.stage=st;if(st==='Contratado'&&!c.hiredAt){c.hiredAt=new Date().toISOString();const j=jobById(c.jobId);if(j){j.status='fechada';j.filledAt=c.hiredAt;}}Store.save();openCand(id);
   offerStageMessage(id,st);
 }
 function delCand(id){ const c=S.candidates.find(x=>x.id===id); if(!c)return;
