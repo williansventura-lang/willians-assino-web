@@ -267,6 +267,7 @@ let FCAND={q:'',vaga:'',etapa:'',status:'',sort:'nome',dir:1};
 let FJOB={q:'',gestor:'',status:''};
 let FPIPE={gestor:'',q:'',status:'aberta',vaga:'__ALL__'};
 let FDASH={vaga:'',gestor:'',status:[]};
+let DASHVIEW='recrutador';
 function jobAge(j){ if(!j.openedAt)return null; const end=(j.status==='fechada'&&j.filledAt)?j.filledAt:new Date().toISOString(); return daysBetween(j.openedAt,end); }
 function uniqGestores(){ return [...new Set(S.jobs.map(j=>j.manager).filter(Boolean))].sort(); }
 function svgBars(items,opts){ // items:[{label,value,color?}] horizontal bars, labels never cut
@@ -307,7 +308,9 @@ function dashScope(){
 }
 function toggleDashStatus(st){ FDASH.status=FDASH.status||[]; const i=FDASH.status.indexOf(st); if(i>=0)FDASH.status.splice(i,1); else FDASH.status.push(st); renderDash(); }
 function renderDash(){
+  if(!FDASH.view)FDASH.view='recrutador';
   const {jobs,cands}=dashScope();
+  if(FDASH.view==='diretoria'){ document.getElementById('v-dash').innerHTML = dashTitleToggle() + dashDiretoria(); return; }
   const openJobs=jobs.filter(j=>j.status==='aberta');
   const totalC=cands.length;
   const inProcess=cands.filter(c=>!['Reprovado','Contratado'].includes(c.stage)).length;
@@ -326,7 +329,13 @@ function renderDash(){
   const statusChips=['aberta','pausada','congelada','cancelada','fechada'].map(st=>{const on=(FDASH.status||[]).includes(st);
     return `<button onclick="toggleDashStatus('${st}')" style="border:1px solid ${on?'#214498':'#E2E6F0'};background:${on?'#214498':'#fff'};color:${on?'#fff':'#4C5573'};border-radius:99px;padding:6px 14px;font-weight:700;font-size:12.5px;cursor:pointer">${on?'✓ ':''}${st}</button>`;}).join(' ');
   document.getElementById('v-dash').innerHTML=`
-  <div class="h-title">Dashboard</div><div class="h-sub">Filtros de status, gestor e vaga refletem em todos os indicadores.</div>
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div><div class="h-title">Dashboard</div><div class="h-sub">Duas visões: estratégica (diretoria) e operacional (recrutador).</div></div>
+    <div class="row" style="gap:6px">
+      <button class="btn ${DASHVIEW==='diretoria'?'gold':'ghost'}" onclick="DASHVIEW='diretoria';renderDash()">💼 Diretoria</button>
+      <button class="btn ${DASHVIEW==='recrutador'?'gold':'ghost'}" onclick="DASHVIEW='recrutador';renderDash()">🎧 Recrutador</button>
+    </div>
+  </div>
   <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,#f7f9fd,#eef2fb)">
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:end">
       <div><label>Status da vaga (multi)</label><div style="display:flex;gap:8px;margin-top:2px">${statusChips}</div></div>
@@ -342,17 +351,7 @@ function renderDash(){
     <div class="kpi"><div class="v">${ttf==null?'—':ttf+'d'}</div><div class="l">Time-to-fill 2026</div></div>
   </div>
   ${dashCostKPI()}
-  <div class="grid g2" style="margin-bottom:16px">
-    <div class="card"><h4 style="margin-bottom:14px">Funil por etapa</h4>${totalC?svgBars(perStage,{lblW:130,rh:26,w:560}):'<div class="empty">Sem candidatos no filtro.</div>'}</div>
-    <div class="card"><h4 style="margin-bottom:14px">Candidatos por vaga</h4>${perVaga.length?svgBars(perVaga,{lblW:340,rh:26,w:640,lblChars:52}):'<div class="empty">Sem candidatos nas vagas do filtro.</div>'}</div>
-  </div>
-  <div class="card"><h4 style="margin-bottom:4px">Tempo das vagas abertas × média histórica</h4>
-    <p style="font-size:12px;color:var(--ink-faint);margin-top:0;margin-bottom:12px">Barra por dias em aberto — verde &lt;25d · amarelo 25–45d · vermelho &gt;45d.</p>
-    ${openBars.length?svgBars(openBars,{lblW:360,rh:28,w:820,lblChars:56}):'<div class="empty">Nenhuma vaga aberta no filtro.</div>'}
-    ${openAges.length?`<table style="margin-top:14px"><tr><th>Vaga</th><th>Gestor</th><th>Dias em aberto</th><th>Média histórica</th></tr>${openAges.slice(0,20).map(x=>{const avg=roleCnt[x.j.titulo]?Math.round(roleAvg[x.j.titulo]/roleCnt[x.j.titulo]):null;const late=avg!=null&&x.age>avg;return `<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${esc(x.j.manager||'—')}</td><td style="font-weight:800;color:${x.age>45?'#A33A40':(x.age>25?'#B5761A':'#2F7A34')}">${x.age}d</td><td>${avg!=null?avg+'d'+(late?' ⚠️':''):'—'}</td></tr>`;}).join('')}</table>`:''}
-  </div>
-  ${dashCostCharts()}
-  ${dashAnalytics()}`;
+  ${DASHVIEW==='diretoria'?dashDiretoria():dashRecrutador()}`;
 }
 
 
@@ -381,8 +380,67 @@ function mesAno(d){ const x=new Date(d); return x.getFullYear()+'-'+String(x.get
 function mesLabel(ym){ const [y,m]=ym.split('-'); return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2); }
 
 let FTTF={mes:'',vaga:''};
+
+function dashToggle(){ const v=FDASH.view||'recrutador';
+  const btn=(id,lb)=>`<button onclick="FDASH.view='${id}';renderDash()" style="border:1px solid ${v===id?'#214498':'#E2E6F0'};background:${v===id?'#214498':'#fff'};color:${v===id?'#fff':'#4C5573'};border-radius:99px;padding:7px 16px;font-weight:800;font-size:13px;cursor:pointer">${lb}</button>`;
+  return `<div style="display:flex;gap:8px;margin:0 0 14px">${btn('recrutador','🎧 Recrutador (operacional)')}${btn('diretoria','💼 Diretoria (estratégico)')}</div>`;
+}
+
+function dashDiretoria(){
+  const jobs=S.jobs, cands=S.candidates;
+  const hired=cands.filter(c=>c.stage==='Contratado'&&c.hiredAt);
+  // Time-to-Hire geral + linha mensal
+  const ttfByMonth={};
+  hired.forEach(c=>{const j=jobById(c.jobId);if(!j||!j.openedAt)return;const d=daysBetween(j.openedAt,c.hiredAt);const ym=mesAno(c.hiredAt);(ttfByMonth[ym]=ttfByMonth[ym]||[]).push(d);});
+  const meses=Object.keys(ttfByMonth).sort();
+  const thLine=[{nome:'Time-to-Hire médio (dias)',cor:'#214498',pts:meses.map(m=>({x:m,y:Math.round(ttfByMonth[m].reduce((a,b)=>a+b,0)/ttfByMonth[m].length)}))}];
+  const thGeral=hired.length?Math.round(hired.map(c=>{const j=jobById(c.jobId);return j&&j.openedAt?daysBetween(j.openedAt,c.hiredAt):null;}).filter(x=>x!=null).reduce((a,b,i,ar)=>a+b/ar.length,0)):null;
+  // CPC: soma custoRecrut das vagas com contratação / nº de contratações
+  let custoTot=0,cpcN=0; hired.forEach(c=>{const j=jobById(c.jobId);if(j&&j.custoRecrut!=null){custoTot+=Number(j.custoRecrut);cpcN++;}});
+  const cpc=cpcN?Math.round(custoTot/cpcN):null;
+  const semCusto=hired.length-cpcN;
+  // Source of Hire (contratados) por fonte
+  const bySrc={}; hired.forEach(c=>{const s=c.source||'—';bySrc[s]=(bySrc[s]||0)+1;});
+  const srcBars=Object.entries(bySrc).map(([k,v])=>({label:k+' ('+Math.round(v/(hired.length||1)*100)+'%)',value:v,color:'#2C57C8'})).sort((a,b)=>b.value-a.value);
+  // Vagas por departamento (todas as vagas históricas)
+  const byDep={}; jobs.forEach(j=>{const f=famById(j.familyId);const nome=f?f.familia:j.familyId;byDep[nome]=(byDep[nome]||0)+1;});
+  const depBars=Object.entries(byDep).map(([k,v])=>({label:k,value:v,color:'#16306f'})).sort((a,b)=>b.value-a.value);
+  // volume inscritos vs aproveitamento
+  const inscritos=cands.length, aprov=hired.length, taxaAprov=inscritos?Math.round(aprov/inscritos*100):0;
+  return `
+  <div class="grid g4" style="margin-bottom:16px">
+    <div class="kpi"><div class="v">${cpc!=null?money0(cpc):'—'}</div><div class="l">Custo por contratação (CPC)</div></div>
+    <div class="kpi lite"><div class="v">${thGeral!=null?thGeral+'d':'—'}</div><div class="l">Time-to-Hire médio</div></div>
+    <div class="kpi lite"><div class="v">${aprov}</div><div class="l">Contratações</div></div>
+    <div class="kpi lite"><div class="v">${taxaAprov}%</div><div class="l">Aproveitamento (contratados/inscritos)</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h4 style="margin-bottom:8px">Time-to-Hire — tendência mensal</h4>${meses.length?svgLine(thLine,{labels:meses.map(mesLabel),w:520,h:230}):'<div class="empty">Sem contratações registradas.</div>'}</div>
+    <div class="card"><h4 style="margin-bottom:8px">Source of Hire (dos contratados)</h4>${srcBars.length?svgBars(srcBars,{lblW:200,rh:24,w:520}):'<div class="empty">Sem contratações para atribuir fonte.</div>'}</div>
+  </div>
+  <div class="card"><h4 style="margin-bottom:8px">Vagas por departamento (histórico)</h4>${depBars.length?svgBars(depBars,{lblW:220,rh:24,w:760}):'<div class="empty">Sem vagas.</div>'}</div>
+  <div class="card"><h4 style="margin-bottom:6px">Custo por contratação — detalhe</h4>
+    <p style="font-size:12.5px;color:var(--ink-soft)">CPC = custo de recrutamento lançado nas vagas ÷ contratações. ${semCusto>0?('<b style="color:#B5761A">'+semCusto+' contratação(ões) sem custo lançado</b> — preencha "Custo de recrutamento" na vaga para o CPC ficar completo.'):'Todas as contratações têm custo lançado.'}</p></div>
+  <div class="card" style="border-left:4px solid var(--gold)"><h4 style="margin-bottom:6px">Diversidade & Inclusão (D&I)</h4>
+    <p style="font-size:12.5px;color:var(--ink-soft)">Ainda não coletamos dados de diversidade no ATS. É um dado sensível (LGPD) que exige consentimento e política clara. Quando a Assino definir como coletar (de forma anônima/voluntária), este painel pode ser ativado.</p></div>
+  <p style="font-size:11.5px;color:var(--ink-faint)">Observação: o CPC considera o custo de recrutamento (anúncio/agência) lançado por vaga. Ele é diferente do "custo da vaga aberta" (margem perdida) da aba Custo.</p>
+  `;
+}
+
+function dashTitleToggle(){ return `<div class="h-title">Dashboard</div><div class="h-sub">Visão para a diretoria — indicadores macro, financeiros e de eficiência.</div>${dashToggle()}`; }
+
 function dashAnalytics(){
   const jobsAll=S.jobs; const cands=S.candidates;
+  // ---- Vagas críticas (SLA) ----
+  const hoje=new Date();
+  const criticas=jobsAll.filter(j=>j.status==='aberta').map(j=>{const age=jobAge(j)||0;
+    let ultMov=null; candsOf(j.id).forEach(c=>{(c.stageHist||[]).forEach(hh=>{const d=hh.saida||hh.entrada;if(d&&(!ultMov||new Date(d)>new Date(ultMov)))ultMov=d;});});
+    const semMov=ultMov?Math.round((hoje-new Date(ultMov))/86400000):null;
+    return {j,age,semMov};}).filter(x=>x.age>45 || (x.semMov!=null&&x.semMov>7)).sort((a,b)=>b.age-a.age);
+  // ---- Conversão do funil (aproveitamento) ----
+  const contr=cands.filter(c=>c.stage==='Contratado').length;
+  const aprovPct=cands.length?Math.round(contr/cands.length*100):0;
+
   // ---- 5) Funil por etapa com % + reprovação por vaga ----
   const total=cands.length||1;
   const funil=STAGES.map(st=>{const n=cands.filter(c=>c.stage===st).length;return {label:st,n,pct:Math.round(n/total*100)};});
@@ -426,6 +484,9 @@ function dashAnalytics(){
     rampLine=[{nome:'Pré-venda ('+rampPre+'d)',cor:'#2C57C8',pts:pts(rampPre)},{nome:'Pós-venda ('+rampPos+'d)',cor:'#E7A317',pts:pts(rampPos)}];
   }
   return `
+  ${criticas.length?`<div class="card" style="margin-top:16px;border-left:4px solid #A33A40"><h4 style="margin-bottom:6px;color:#A33A40">⚠ Vagas críticas (SLA)</h4>
+    <p style="font-size:12px;color:var(--ink-faint);margin:0 0 8px">Abertas há +45 dias ou sem movimentação de candidato há +7 dias.</p>
+    <table><tr><th>Vaga</th><th>Gestor</th><th>Dias aberta</th><th>Sem movimentação</th></tr>${criticas.map(x=>`<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${esc(x.j.manager||'—')}</td><td style="font-weight:800;color:#A33A40">${x.age}d</td><td>${x.semMov!=null?x.semMov+'d':'—'}</td></tr>`).join('')}</table></div>`:''}
   <div class="card" style="margin-top:16px"><h4 style="margin-bottom:4px">Funil por etapa (% do total)</h4>
     <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">${cands.length} candidatos no total. % = fatia da etapa.</p>
     ${svgBars(funilBars,{lblW:170,rh:24,w:640})}
@@ -456,6 +517,73 @@ function dashAnalytics(){
     <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">Tendência de entrega do novo colaborador até atingir 100% de produtividade (premissas da aba Custo).</p>
     ${svgLine(rampLine,{labels:rampLine[0].pts.map(p=>p.x),w:820,h:230})}</div>`:''}
   `;
+}
+
+
+/* ===== VISÃO RECRUTADOR (operacional) ===== */
+function dashRecrutador(){
+  const jobs=S.jobs, cands=S.candidates;
+  // funil %
+  const total=cands.length||1;
+  const perStage=STAGES.map(st=>{const n=cands.filter(c=>c.stage===st).length;return {label:st+' ('+Math.round(n/total*100)+'%)',value:n,color:st==='Reprovado'?'#A33A40':(st==='Contratado'?'#2F7A34':'#2C57C8')};});
+  // candidatos por vaga
+  const perVaga=jobs.map(j=>({label:j.code+' · '+j.titulo,value:candsOf(j.id).length})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value).slice(0,12);
+  // alerta vagas críticas
+  const abertas=jobs.filter(j=>j.status==='aberta');
+  function ultimaMov(j){ let d=j.openedAt?new Date(j.openedAt).getTime():0; candsOf(j.id).forEach(c=>{(c.stageHist||[]).forEach(h=>{const t=new Date(h.entrada).getTime();if(t>d)d=t;}); if(c.createdAt){const t=new Date(c.createdAt).getTime();if(t>d)d=t;}}); return d; }
+  const hoje=Date.now();
+  const criticas=abertas.map(j=>{const age=jobAge(j)||0;const semMov=Math.round((hoje-ultimaMov(j))/86400000);return {j,age,semMov};}).filter(x=>x.age>45||x.semMov>7).sort((a,b)=>b.age-a.age);
+  const alerta=criticas.length?`<div class="card" style="border:2px solid #A33A40"><h4 style="margin-bottom:8px;color:#A33A40">⚠ Vagas críticas (${criticas.length})</h4>
+    <table><tr><th>Vaga</th><th>Gestor</th><th>Dias aberta</th><th>Sem movimentação</th></tr>${criticas.map(x=>`<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${esc(x.j.manager||'—')}</td><td style="font-weight:800;color:${x.age>45?'#A33A40':'#4C5573'}">${x.age}d</td><td style="font-weight:800;color:${x.semMov>7?'#B5761A':'#4C5573'}">${x.semMov}d</td></tr>`).join('')}</table>
+    <p style="font-size:11.5px;color:var(--ink-faint);margin-top:6px">Critério: aberta há mais de 45 dias, ou sem movimentação de candidato há mais de 7 dias.</p></div>`:'<div class="card"><b>Vagas críticas:</b> nenhuma no momento. 👍</div>';
+  // conversão por etapa
+  const idxOf={}; STAGES.forEach((s,i)=>idxOf[s]=i);
+  const alcancou=STAGES.map(()=>0);
+  cands.forEach(c=>{ let maxi=idxOf[c.stage]!=null?idxOf[c.stage]:0; (c.stageHist||[]).forEach(h=>{const ix=idxOf[h.etapa];if(ix!=null&&ix>maxi)maxi=ix;}); for(let k=0;k<=maxi&&k<STAGES.length;k++){ if(STAGES[k]!=='Reprovado')alcancou[k]++; } });
+  const convRows=[];
+  for(let k=0;k<STAGES.length-2;k++){ if(STAGES[k]==='Reprovado')continue; const a=alcancou[k],bb=alcancou[k+1]; if(a>0&&STAGES[k+1]!=='Reprovado')convRows.push([STAGES[k]+' → '+STAGES[k+1],a,bb,Math.round(bb/a*100)]); }
+  const conv=`<div class="card"><h4 style="margin-bottom:6px">Taxa de conversão por etapa</h4><p style="font-size:12px;color:var(--ink-faint);margin:0 0 8px">Conversão muito alta numa etapa técnica pode indicar filtro anterior frouxo ou vaga mal definida.</p>${convRows.length?`<table><tr><th>Passagem</th><th>Entraram</th><th>Passaram</th><th>Conversão</th></tr>${convRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td style="font-weight:800;color:${r[3]>85?'#B5761A':(r[3]<20?'#A33A40':'#2F7A34')}">${r[3]}%</td></tr>`).join('')}</table>`:'<div class="empty">Sem movimentação suficiente ainda.</div>'}</div>`;
+  return alerta +
+    `<div class="grid g2" style="margin:16px 0">
+      <div class="card"><h4 style="margin-bottom:14px">Funil por etapa (%)</h4>${total>1?svgBars(perStage,{lblW:150,rh:24,w:560}):'<div class="empty">Sem candidatos.</div>'}</div>
+      <div class="card"><h4 style="margin-bottom:14px">Candidatos por vaga</h4>${perVaga.length?svgBars(perVaga,{lblW:300,rh:22,w:560,lblChars:46}):'<div class="empty">Sem candidatos.</div>'}</div>
+    </div>` +
+    conv +
+    ttfPorEtapaCard() +
+    dashCostKPI();
+}
+/* TTF por etapa isolado (reutilizável) */
+function ttfPorEtapaCard(){
+  const etAcc={}; STAGES.forEach(s=>etAcc[s]=[]);
+  S.candidates.forEach(c=>{(c.stageHist||[]).forEach(h=>{if(h.dias!=null&&etAcc[h.etapa]!=null)etAcc[h.etapa].push(h.dias);});});
+  const etBars=STAGES.filter(s=>etAcc[s].length).map(s=>{const arr=etAcc[s];const m=arr.reduce((a,b)=>a+b,0)/arr.length;return {label:s,value:Math.round(m),suffix:'d',color:m>15?'#A33A40':(m>7?'#E7A317':'#2F7A34')};});
+  return `<div class="card"><h4 style="margin-bottom:4px">Time-to-fill por etapa (média de dias)</h4><p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">Onde o processo mais demora — inclui esperas externas (ex.: agenda do gestor).</p>${etBars.length?svgBars(etBars,{lblW:150,rh:24,w:600}):'<div class="empty">Ainda sem histórico de etapas — enche conforme você movimenta candidatos.</div>'}</div>`;
+}
+/* ===== VISÃO DIRETORIA (estratégico/financeiro) ===== */
+function dashDiretoria(){
+  const hired=S.candidates.filter(c=>c.stage==='Contratado');
+  let custoRec=0,nHires=0; S.jobs.forEach(j=>{const cr=Number(j.custoRecrut||0)||0;const hh=candsOf(j.id).filter(c=>c.stage==='Contratado').length;custoRec+=cr;nHires+=hh;});
+  const cpc=nHires?Math.round(custoRec/nHires):null;
+  const src={}; hired.forEach(c=>{const s=c.source||'—';src[s]=(src[s]||0)+1;});
+  const srcBars=Object.entries(src).map(([k,v])=>({label:k+' ('+Math.round(v/(hired.length||1)*100)+'%)',value:v,color:'#2C57C8'})).sort((a,b)=>b.value-a.value);
+  const dep={}; S.jobs.forEach(j=>{const f=famById(j.familyId);const n=f?f.familia:j.familyId;dep[n]=(dep[n]||0)+1;});
+  const depBars=Object.entries(dep).map(([k,v])=>({label:k,value:v,color:'#16306F'})).sort((a,b)=>b.value-a.value);
+  const kpiCPC=`<div class="grid g3" style="margin-bottom:16px">
+    <div class="kpi"><div class="v">${cpc!=null?money0(cpc):'—'}</div><div class="l">Custo por contratação (CPC)</div></div>
+    <div class="kpi lite"><div class="v">${money0(custoRec)}</div><div class="l">Investido em recrutamento</div></div>
+    <div class="kpi lite"><div class="v">${nHires}</div><div class="l">Contratações</div></div>
+  </div>
+  <div class="card" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;align-items:center"><div style="font-size:12.5px;color:var(--ink-soft)">Lance os custos de recrutamento (anúncio, agência, horas) por vaga para o CPC ficar completo.</div><button class="btn sm" onclick="lancarCustoRecrut()">Lançar custos por vaga</button></div></div>`;
+  return kpiCPC +
+    `<div class="grid g2">
+      <div class="card"><h4 style="margin-bottom:10px">Source of Hire (por contratado)</h4>${srcBars.length?svgBars(srcBars,{lblW:190,rh:24,w:520}):'<div class="empty">Sem contratações ainda.</div>'}</div>
+      <div class="card"><h4 style="margin-bottom:10px">Vagas por departamento</h4>${depBars.length?svgBars(depBars,{lblW:200,rh:22,w:520}):'<div class="empty">Sem vagas.</div>'}</div>
+    </div>` +
+    dashCostKPI() + dashCostCharts() + dashAnalytics();
+}
+function lancarCustoRecrut(){
+  const rows=S.jobs.map(j=>`<div class="row" style="align-items:center;margin-bottom:5px"><div style="flex:1;font-size:13px">${esc(j.code)} ${esc(j.titulo)}</div><input type="number" min="0" style="width:140px" value="${j.custoRecrut||''}" placeholder="R$" onchange="(function(v){jobById('${j.id}').custoRecrut=Number(v)||0;Store.save();})(this.value)"></div>`).join('');
+  openModal('Custos de recrutamento por vaga',`<p style="font-size:12.5px;color:var(--ink-soft)">Some o que foi gasto para recrutar cada vaga (anúncios, agência, horas). O CPC usa esse valor ÷ contratações.</p>${rows||'<div class="empty">Sem vagas.</div>'}<div class="row" style="margin-top:10px"><button class="btn navy" onclick="closeModal();renderDash()">Concluir</button></div>`);
 }
 
 function dashCostKPI(){
@@ -820,6 +948,7 @@ function editJob(id){
      <div><label>Regional</label><input id="j-reg" value="${esc(j?j.regional:'SP')}"></div>
      <div><label>Formato</label><select id="j-fmt"><option ${j&&j.formato==='Remoto'?'selected':''}>Remoto</option><option ${j&&j.formato==='Presencial'?'selected':''}>Presencial</option><option ${j&&j.formato==='Híbrido'?'selected':''}>Híbrido</option></select></div>
      <div><label>Faixa salarial</label><input id="j-sal" value="${esc(j?j.salario:'')}" placeholder="R$ 0,00"></div>
+     <div><label>Custo de recrutamento (anúncio/agência) R$</label><input id="j-custorec" type="number" min="0" value="${j&&j.custoRecrut!=null?j.custoRecrut:''}" placeholder="0"></div>
      <div><label>Setor de custo (vaga aberta)</label><select id="j-custo"><option value="" ${!j||!j.custoSetor?'selected':''}>— não contabilizar</option><option value="pre" ${j&&j.custoSetor==='pre'?'selected':''}>Pré-venda</option><option value="pos" ${j&&j.custoSetor==='pos'?'selected':''}>Pós-venda</option></select></div>
      <div><label>Situação da posição</label><select id="j-sit">
        <option value="aumento" ${(!j||!j.custoSituacao?(j&&j.reqTipoVaga==='Substituição'?false:true):j.custoSituacao==='aumento')?'selected':''}>Aumento de quadro (vazia)</option>
@@ -841,7 +970,7 @@ function saveJob(id){
     contrato:document.getElementById('j-con').value,local:document.getElementById('j-loc').value,status:document.getElementById('j-sta').value,
     recruiter:document.getElementById('j-rec').value,manager:document.getElementById('j-man').value,requisitos:reqs,
     extCode:document.getElementById('j-ext').value,posicoes:Number(document.getElementById('j-pos').value)||1,
-    regional:document.getElementById('j-reg').value,formato:document.getElementById('j-fmt').value,salario:document.getElementById('j-sal').value,custoSetor:document.getElementById('j-custo').value,custoSituacao:document.getElementById('j-sit').value,jdId:(window._jdSel||(id?((jobById(id)||{}).jdId||''):'')),processo:(document.getElementById('j-proc')?document.getElementById('j-proc').value:'externo')};
+    regional:document.getElementById('j-reg').value,formato:document.getElementById('j-fmt').value,salario:document.getElementById('j-sal').value,custoSetor:document.getElementById('j-custo').value,custoSituacao:document.getElementById('j-sit').value,jdId:(window._jdSel||(id?((jobById(id)||{}).jdId||''):'')),processo:(document.getElementById('j-proc')?document.getElementById('j-proc').value:'externo'),custoRecrut:(document.getElementById('j-custorec')&&document.getElementById('j-custorec').value!==''?Number(document.getElementById('j-custorec').value):null)};
   if(id){Object.assign(jobById(id),data);} else {data.id=uid();data.code=nextCode(fam);data.openedAt=new Date().toISOString();S.jobs.push(data);}
   if(id){const j=jobById(id); if(j.status==='fechada'&&!j.filledAt)j.filledAt=new Date().toISOString();}
   Store.save();closeModal();renderJobs();
