@@ -270,16 +270,16 @@ let FDASH={vaga:'',gestor:'',status:[]};
 let DASHVIEW='recrutador';
 function jobAge(j){ if(!j.openedAt)return null; const end=(j.status==='fechada'&&j.filledAt)?j.filledAt:new Date().toISOString(); return daysBetween(j.openedAt,end); }
 function uniqGestores(){ return [...new Set(S.jobs.map(j=>j.manager).filter(Boolean))].sort(); }
-function svgBars(items,opts){ // items:[{label,value,color?}] horizontal bars, labels never cut
-  opts=opts||{}; const max=Math.max(1,...items.map(i=>i.value)); const bw=opts.w||860, lblW=opts.lblW||300, rh=opts.rh||30, gap=8, padR=54;
-  const h=items.length*(rh+gap)+8; let y=4, rows='';
-  items.forEach(it=>{ const barMax=bw-lblW-padR; const w=Math.max(3,Math.round((it.value/max)*barMax)); const col=it.color||'#2C57C8';
-    const lbl=String(it.label);
-    rows+=`<text x="0" y="${y+rh/2+4}" font-size="12.5" fill="#0B1120" font-family="Manrope" font-weight="600">${escSvg(lbl,opts.lblChars||44)}</text>`+
-          `<rect x="${lblW}" y="${y}" width="${w}" height="${rh}" rx="6" fill="${col}"/>`+
-          `<text x="${lblW+w+7}" y="${y+rh/2+4}" font-size="12.5" font-weight="800" fill="#0B1120" font-family="Manrope">${it.value}${opts.suffix||''}</text>`;
+function svgBars(items,opts){
+  opts=opts||{}; const max=Math.max(1,...items.map(i=>i.value)); const bw=opts.w||860, lblW=opts.lblW||300, rh=opts.rh||22, gap=opts.gap||12, padR=58;
+  const h=items.length*(rh+gap)+6; let y=6, rows='';
+  items.forEach(it=>{ const barMax=bw-lblW-padR; const w=Math.max(2,Math.round((it.value/max)*barMax)); const col=it.color||'#3E63C7';
+    rows+='<text x="0" y="'+(y+rh/2+4)+'" font-size="12" fill="#3A4256" font-family="Manrope">'+escSvg(String(it.label),opts.lblChars||46)+'</text>'+
+          '<rect x="'+lblW+'" y="'+y+'" width="'+(barMax)+'" height="'+rh+'" rx="'+(rh/2)+'" fill="#F1F3F9"/>'+
+          '<rect x="'+lblW+'" y="'+y+'" width="'+w+'" height="'+rh+'" rx="'+(rh/2)+'" fill="'+col+'"/>'+
+          '<text x="'+(lblW+w+8)+'" y="'+(y+rh/2+4)+'" font-size="12" font-weight="700" fill="#0B1120" font-family="Manrope">'+it.value+(opts.suffix||'')+'</text>';
     y+=rh+gap; });
-  return `<svg viewBox="0 0 ${bw} ${h}" width="100%" style="max-width:100%">${rows}</svg>`;
+  return '<svg viewBox="0 0 '+bw+' '+h+'" width="100%" style="max-width:100%">'+rows+'</svg>';
 }
 function escSvg(s,n){n=n||40;s=(s==null?'':String(s));if(s.length>n)s=s.slice(0,n-1)+'…';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 
@@ -357,25 +357,31 @@ function renderDash(){
 
 /* ===== Helpers de gráfico ===== */
 function money0(v){return 'R$ '+Math.round(v).toLocaleString('pt-BR');}
-function svgLine(series, opts){ // series:[{nome,cor,pts:[{x,y}]}] com x categórico via labels
-  opts=opts||{}; const labels=opts.labels||[]; const w=opts.w||820,hh=opts.h||240,padL=42,padB=28,padT=12,padR=12;
-  const allY=series.flatMap(s=>s.pts.map(p=>p.y)); const maxY=Math.max(1,...allY);
+function svgLine(series, opts){ // series:[{nome,cor,pts:[{x,y}]}]
+  opts=opts||{}; const labels=opts.labels||[]; const w=opts.w||860,hh=opts.h||260,padL=44,padB=34,padT=22,padR=18;
+  const allY=series.flatMap(s=>s.pts.map(p=>p.y)); const maxY=Math.max(1,...allY); const niceMax=Math.ceil(maxY*1.15);
   const n=labels.length||Math.max(...series.map(s=>s.pts.length));
-  const X=i=> padL + (n<=1?0:(i*(w-padL-padR)/(n-1)));
-  const Y=v=> hh-padB - (v/maxY)*(hh-padB-padT);
+  const X=i=> padL + (n<=1?(w-padL-padR)/2:(i*(w-padL-padR)/(n-1)));
+  const Y=v=> hh-padB - (v/niceMax)*(hh-padB-padT);
   let g='';
-  // grid y (0, meio, max)
-  [0,maxY/2,maxY].forEach(v=>{ g+=`<line x1="${padL}" y1="${Y(v)}" x2="${w-padR}" y2="${Y(v)}" stroke="#eef1f7"/><text x="0" y="${Y(v)+4}" font-size="10" fill="#8A92AC" font-family="Manrope">${Math.round(v)}</text>`; });
-  // x labels
-  labels.forEach((l,i)=>{ if(n>12 && i%2) return; g+=`<text x="${X(i)}" y="${hh-8}" font-size="10" fill="#8A92AC" font-family="Manrope" text-anchor="middle">${escSvg(l,8)}</text>`; });
-  series.forEach(s=>{ const d=s.pts.map((p,i)=>(i?'L':'M')+X(i)+' '+Y(p.y)).join(' ');
-    g+=`<path d="${d}" fill="none" stroke="${s.cor}" stroke-width="2.5"/>`;
-    s.pts.forEach((p,i)=>{ g+=`<circle cx="${X(i)}" cy="${Y(p.y)}" r="3" fill="${s.cor}"/>`; });
+  // grade horizontal sutil (3 linhas)
+  for(let k=0;k<=2;k++){ const v=niceMax*k/2; const y=Y(v); g+='<line x1="'+padL+'" y1="'+y+'" x2="'+(w-padR)+'" y2="'+y+'" stroke="#EEF1F7" stroke-width="1"/><text x="'+(padL-8)+'" y="'+(y+3.5)+'" font-size="10" fill="#AAB2C5" font-family="Manrope" text-anchor="end">'+Math.round(v)+'</text>'; }
+  // labels x
+  labels.forEach((l,i)=>{ if(n>10 && i%2) return; g+='<text x="'+X(i)+'" y="'+(hh-12)+'" font-size="10.5" fill="#8A92AC" font-family="Manrope" text-anchor="middle">'+escSvg(l,8)+'</text>'; });
+  series.forEach(s=>{
+    // área suave sob a linha
+    if(s.pts.length>1){ let area='M'+X(0)+' '+Y(s.pts[0].y); s.pts.forEach((p,i)=>{area+=' L'+X(i)+' '+Y(p.y);}); area+=' L'+X(s.pts.length-1)+' '+(hh-padB)+' L'+X(0)+' '+(hh-padB)+' Z';
+      g+='<path d="'+area+'" fill="'+s.cor+'" opacity="0.06"/>'; }
+    const d=s.pts.map((p,i)=>(i?'L':'M')+X(i)+' '+Y(p.y)).join(' ');
+    g+='<path d="'+d+'" fill="none" stroke="'+s.cor+'" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    s.pts.forEach((p,i)=>{ g+='<circle cx="'+X(i)+'" cy="'+Y(p.y)+'" r="3.5" fill="#fff" stroke="'+s.cor+'" stroke-width="2"/>';
+      // rótulo do valor acima do ponto
+      g+='<text x="'+X(i)+'" y="'+(Y(p.y)-9)+'" font-size="10.5" font-weight="700" fill="'+s.cor+'" font-family="Manrope" text-anchor="middle">'+p.y+(opts.suffix||'')+'</text>'; });
   });
-  // legenda
-  let lg=series.map((s,i)=>`<span style="font-size:11.5px;color:#4C5573;margin-right:14px"><span style="display:inline-block;width:10px;height:10px;background:${s.cor};border-radius:2px;margin-right:4px"></span>${escSvg(s.nome,30)}</span>`).join('');
-  return `<div>${lg}</div><svg viewBox="0 0 ${w} ${hh}" width="100%" style="max-width:100%">${g}</svg>`;
+  const lg=series.map(s=>'<span style="font-size:11.5px;color:#4C5573;margin-right:16px;display:inline-flex;align-items:center"><span style="display:inline-block;width:9px;height:9px;background:'+s.cor+';border-radius:50%;margin-right:5px"></span>'+escSvg(s.nome,34)+'</span>').join('');
+  return '<div style="margin-bottom:6px">'+lg+'</div><svg viewBox="0 0 '+w+' '+hh+'" width="100%" style="max-width:100%">'+g+'</svg>';
 }
+
 function mesAno(d){ const x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0'); }
 function mesLabel(ym){ const [y,m]=ym.split('-'); return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2); }
 
@@ -446,7 +452,8 @@ function dashAnalytics(){
   const funil=STAGES.map(st=>{const n=cands.filter(c=>c.stage===st).length;return {label:st,n,pct:Math.round(n/total*100)};});
   const funilBars=funil.map(f=>({label:f.label+' ('+f.pct+'%)',value:f.n,color:f.label==='Reprovado'?'#A33A40':(f.label==='Contratado'?'#2F7A34':'#2C57C8')}));
   // reprovação por vaga: reprovados/total por vaga (top)
-  const repv=jobsAll.map(j=>{const cs=candsOf(j.id);const rep=cs.filter(c=>c.stage==='Reprovado'||c.statusAtual==='Reprovado'||c.statusAtual==='Candidato Declinou').length;return {j,total:cs.length,rep,taxa:cs.length?Math.round(rep/cs.length*100):0};}).filter(x=>x.total>=3).sort((a,b)=>b.taxa-a.taxa).slice(0,10);
+  const esforco=jobsAll.map(j=>{const cs=candsOf(j.id);const rec=cs.filter(c=>c.stage==='Reprovado'||c.statusAtual==='Reprovado'||c.statusAtual==='Candidato Declinou').length;const contr=cs.filter(c=>c.stage==='Contratado').length;return {j,total:cs.length,rec,contr,porContr:contr?(cs.length/contr):null,recPorContr:contr?(rec/contr):null};}).filter(x=>x.contr>0).sort((a,b)=>(b.porContr||0)-(a.porContr||0)).slice(0,12);
+  const esforcoBars=esforco.map(x=>({label:x.j.code+' · '+x.j.titulo,value:Math.round(x.porContr*10)/10,color:x.porContr>=10?'#C0555A':(x.porContr>=5?'#D9A441':'#4E8C54')}));
   // ---- 3) TTF por etapa (média de dias por etapa, do stageHist) ----
   const etAcc={}; STAGES.forEach(s=>etAcc[s]=[]);
   cands.forEach(c=>{ (c.stageHist||[]).forEach(hh=>{ if(hh.dias!=null && etAcc[hh.etapa]!=null) etAcc[hh.etapa].push(hh.dias); }); });
@@ -487,10 +494,13 @@ function dashAnalytics(){
   ${criticas.length?`<div class="card" style="margin-top:16px;border-left:4px solid #A33A40"><h4 style="margin-bottom:6px;color:#A33A40">⚠ Vagas críticas (SLA)</h4>
     <p style="font-size:12px;color:var(--ink-faint);margin:0 0 8px">Abertas há +45 dias ou sem movimentação de candidato há +7 dias.</p>
     <table><tr><th>Vaga</th><th>Gestor</th><th>Dias aberta</th><th>Sem movimentação</th></tr>${criticas.map(x=>`<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${esc(x.j.manager||'—')}</td><td style="font-weight:800;color:#A33A40">${x.age}d</td><td>${x.semMov!=null?x.semMov+'d':'—'}</td></tr>`).join('')}</table></div>`:''}
-  <div class="card" style="margin-top:16px"><h4 style="margin-bottom:4px">Funil por etapa (% do total)</h4>
+  <div class="card" style="margin-top:20px;padding:20px 22px"><h4 style="margin-bottom:4px;font-weight:700">Funil por etapa <span style="font-weight:500;color:var(--ink-faint);font-size:12px">(% do total)</span></h4>
     <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">${cands.length} candidatos no total. % = fatia da etapa.</p>
     ${svgBars(funilBars,{lblW:170,rh:24,w:640})}
-    ${repv.length?`<h4 style="margin:14px 0 6px">Taxa de reprovação/declínio por vaga</h4><table><tr><th>Vaga</th><th>Candidatos</th><th>Reprov./declínio</th><th>Taxa</th></tr>${repv.map(x=>`<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${x.total}</td><td>${x.rep}</td><td style="font-weight:800;color:${x.taxa>70?'#A33A40':(x.taxa>50?'#B5761A':'#2F7A34')}">${x.taxa}%</td></tr>`).join('')}</table>`:''}
+    ${esforco.length?`<h4 style="margin:16px 0 4px">Candidatos por contratação (esforço de fechamento)</h4>
+    <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px">Quantos candidatos foram avaliados para fechar 1 vaga. Barra maior = vaga mais difícil de preencher.</p>
+    ${svgBars(esforcoBars,{lblW:280,rh:22,w:640,suffix:' /contr.',lblChars:46})}
+    <table style="margin-top:12px"><tr><th>Vaga</th><th>Avaliados</th><th>Recusados</th><th>Contratados</th><th>Recusados p/ 1 contratação</th></tr>${esforco.map(x=>`<tr><td>${esc(x.j.code)} ${esc(x.j.titulo)}</td><td>${x.total}</td><td>${x.rec}</td><td>${x.contr}</td><td style="font-weight:800;color:${(x.recPorContr||0)>=9?'#A33A40':((x.recPorContr||0)>=4?'#B5761A':'#2F7A34')}">${x.recPorContr!=null?(Math.round(x.recPorContr*10)/10):'—'}</td></tr>`).join('')}</table>`:''}
   </div>
 
   <div class="card"><h4 style="margin-bottom:4px">Time-to-fill por etapa (média de dias)</h4>
